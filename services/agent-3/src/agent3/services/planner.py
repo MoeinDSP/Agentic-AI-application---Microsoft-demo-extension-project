@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from functools import lru_cache
 
 from agent3.models.plan import (
@@ -28,11 +29,18 @@ class PlannerService:
 
         for sequence, place in enumerate(prioritized_places, start=1):
             if consumed_minutes + place.estimated_duration_minutes <= available_minutes:
+                stop_start = self._offset_time(request.day_start, consumed_minutes)
+                stop_end = self._offset_time(
+                    request.day_start,
+                    consumed_minutes + place.estimated_duration_minutes,
+                )
                 ordered_stops.append(
                     PlannedStop(
                         place_id=place.id,
                         place_name=place.name,
                         sequence=sequence,
+                        start_time=stop_start,
+                        end_time=stop_end,
                         estimated_duration_minutes=place.estimated_duration_minutes,
                     )
                 )
@@ -57,6 +65,10 @@ class PlannerService:
             notes=notes,
             feasibility=not dropped_places,
         )
+
+    def _offset_time(self, base_time, offset_minutes: int):
+        base_datetime = datetime.combine(datetime.today(), base_time)
+        return (base_datetime + timedelta(minutes=offset_minutes)).time()
 
 
 @lru_cache(maxsize=1)

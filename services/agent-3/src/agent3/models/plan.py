@@ -47,6 +47,8 @@ class PlannedStop(BaseModel):
     place_id: str
     place_name: str
     sequence: int
+    start_time: time
+    end_time: time
     estimated_duration_minutes: int
 
 
