@@ -34,10 +34,22 @@ tests/
 uv sync --group dev
 ```
 
+Or, if `make` is available:
+
+```bash
+make install
+```
+
 ## Run
 
 ```bash
 uv run uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1 --port 8090
+```
+
+Or:
+
+```bash
+make run
 ```
 
 ## Test
@@ -46,10 +58,22 @@ uv run uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1 --port 80
 uv run pytest
 ```
 
+Or:
+
+```bash
+make test
+```
+
 ## Lint
 
 ```bash
 uv run ruff check .
+```
+
+Or:
+
+```bash
+make lint
 ```
 
 ## Environment Variables
@@ -61,6 +85,15 @@ Copy `.env.example` to `.env` if needed.
 - `AGENT3_MCP_HOST`: bind host for local runs.
 - `AGENT3_MCP_PORT`: bind port for local runs and Cloud Run compatibility.
 - `AGENT3_MCP_LOG_LEVEL`: logging level.
+
+## Developer Workflow
+
+Standard targets:
+
+- `install`
+- `run`
+- `test`
+- `lint`
 
 ## Docker Usage
 

@@ -35,10 +35,22 @@ tests/
 uv sync
 ```
 
+Or, if `make` is available:
+
+```bash
+make install
+```
+
 ## Run
 
 ```bash
 uv run uvicorn agent3.main:app --factory --reload --host 127.0.0.1 --port 8080
+```
+
+Or:
+
+```bash
+make run
 ```
 
 ## Test
@@ -47,10 +59,22 @@ uv run uvicorn agent3.main:app --factory --reload --host 127.0.0.1 --port 8080
 uv run pytest
 ```
 
+Or:
+
+```bash
+make test
+```
+
 ## Lint
 
 ```bash
 uv run ruff check .
+```
+
+Or:
+
+```bash
+make lint
 ```
 
 ## Environment Variables
@@ -69,6 +93,15 @@ Copy `.env.example` to `.env` if needed.
 - `models/` owns request and response contracts.
 - `services/` owns placeholder planning behavior.
 - `core/` owns config and logging.
+
+## Developer Workflow
+
+Standard targets:
+
+- `install`
+- `run`
+- `test`
+- `lint`
 
 ## Docker Usage
 
