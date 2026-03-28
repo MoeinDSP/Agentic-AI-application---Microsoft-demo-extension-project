@@ -1,7 +1,15 @@
 from functools import lru_cache
 
 from agent3.core.config import Settings, get_settings
-from agent3.models.a2a import AgentAuth, AgentCard, AgentEndpoint, AgentSkill
+from agent3.models.a2a import (
+    A2ARequest,
+    A2AResponse,
+    AgentAuth,
+    AgentCard,
+    AgentEndpoint,
+    AgentSkill,
+)
+from agent3.services.planner import PlannerService, get_planner_service
 
 
 class AgentCardService:
@@ -60,3 +68,26 @@ class AgentCardService:
 @lru_cache(maxsize=1)
 def get_agent_card_service() -> AgentCardService:
     return AgentCardService(get_settings())
+
+
+class A2AService:
+    def __init__(self, planner: PlannerService) -> None:
+        self._planner = planner
+
+    def handle_request(self, request: A2ARequest) -> A2AResponse:
+        output = self._planner.build_plan(request.input)
+        return A2AResponse(
+            request_id=request.request_id,
+            status="completed",
+            result_type="plan",
+            output=output,
+            notes=[
+                "minimal_a2a_boundary",
+                "action=plan_day",
+            ],
+        )
+
+
+@lru_cache(maxsize=1)
+def get_a2a_service() -> A2AService:
+    return A2AService(get_planner_service())
