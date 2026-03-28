@@ -21,6 +21,11 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title=settings.app_name,
+        description=(
+            "Agent 3 itinerary planning service with a minimal A2A-compatible "
+            "HTTP boundary."
+        ),
+        version=settings.service_version,
         lifespan=lifespan,
     )
     app.include_router(router)
