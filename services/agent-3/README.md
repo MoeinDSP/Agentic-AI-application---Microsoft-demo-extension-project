@@ -5,11 +5,15 @@ deterministic placeholder itinerary. The current implementation is local-first
 and intentionally simple so the API contract can stabilize before real planning
 logic is added.
 
+It now also exposes a minimal A2A-compatible HTTP boundary for orchestrator
+discovery and invocation. This is A2A-shaped and A2A-ready, not a full
+spec-complete A2A implementation.
+
 ## Purpose
 
 - Expose a typed HTTP API for itinerary planning.
-- Keep the service ready for future A2A exposure without coupling that work into
-  the initial scaffold.
+- Expose a minimal A2A-ready discovery and invocation boundary for an
+  orchestrator.
 - Provide a production-sensible baseline for local development and later Cloud
   Run deployment.
 
@@ -83,8 +87,12 @@ Copy `.env.example` to `.env` if needed.
 
 - `AGENT3_APP_NAME`: FastAPI application name.
 - `AGENT3_ENVIRONMENT`: environment label for logs and config.
+- `AGENT3_SERVICE_VERSION`: version surfaced in the Agent Card.
 - `AGENT3_HOST`: bind host for local runs.
 - `AGENT3_PORT`: bind port for local runs and Cloud Run compatibility.
+- `AGENT3_PUBLIC_BASE_URL`: public base URL used in the Agent Card.
+- `AGENT3_AGENT_CARD_PATH`: Agent Card path.
+- `AGENT3_A2A_PATH`: A2A request path.
 - `AGENT3_LOG_LEVEL`: logging level.
 
 ## Architecture Notes
@@ -93,6 +101,70 @@ Copy `.env.example` to `.env` if needed.
 - `models/` owns request and response contracts.
 - `services/` owns placeholder planning behavior.
 - `core/` owns config and logging.
+
+## A2A Support
+
+Current scope:
+
+- `GET /.well-known/agent-card.json` exposes discovery metadata.
+- `POST /a2a` accepts a minimal typed A2A-shaped planning request.
+- `POST /v1/plan` remains the direct domain API and is still preserved.
+
+Current limitations:
+
+- This is not a full A2A protocol implementation.
+- Authentication is still a local-first placeholder.
+- Planner behavior is still deterministic stub logic.
+
+## Example Requests
+
+Health:
+
+```bash
+curl http://127.0.0.1:8080/health
+```
+
+Agent Card:
+
+```bash
+curl http://127.0.0.1:8080/.well-known/agent-card.json
+```
+
+Minimal A2A request:
+
+```bash
+curl -X POST http://127.0.0.1:8080/a2a \
+  -H "Content-Type: application/json" \
+  -d '{
+    "request_id": "req-123",
+    "action": "plan_day",
+    "input": {
+      "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
+      "day_start": "09:00:00",
+      "day_end": "11:00:00",
+      "transport_preferences": ["walk"],
+      "places": [
+        {
+          "id": "colosseum",
+          "name": "Colosseum",
+          "lat": 41.8902,
+          "lng": 12.4922,
+          "estimated_duration_minutes": 90,
+          "priority": 5
+        }
+      ]
+    }
+  }'
+```
+
+## A2A Flow
+
+```text
+orchestrator
+  -> agent-3 A2A boundary
+  -> planner stub
+  -> future tool service integrations
+```
 
 ## Developer Workflow
 
@@ -119,6 +191,9 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 
 ## Future Integration Notes
 
-- The service is designed to become an HTTP-facing A2A boundary later.
+- Real A2A protocol features can replace the current HTTP/JSON adapter without a
+  full rewrite of the planning API.
 - Real planner logic should replace the deterministic placeholder service
   without changing the API surface.
+- Future tool calls should flow into `agent-3-mcp` instead of being embedded
+  directly into the agent boundary.
