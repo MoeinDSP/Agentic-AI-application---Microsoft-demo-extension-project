@@ -64,7 +64,17 @@ Copy `.env.example` to `.env` if needed.
 
 ## Docker Usage
 
-Docker support will be added in a later scaffold step.
+Build the image from the service directory:
+
+```bash
+docker build -t agent-3-mcp:local .
+```
+
+Run the container locally:
+
+```bash
+docker run --rm -p 8090:8090 -e PORT=8090 agent-3-mcp:local
+```
 
 ## Future Integration Notes
 
