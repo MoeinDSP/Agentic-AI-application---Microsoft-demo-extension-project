@@ -1,6 +1,11 @@
 from functools import lru_cache
 
-from agent3.models.plan import DroppedPlace, PlanRequest, PlanResponse, PlannedStop
+from agent3.models.plan import (
+    DroppedPlace,
+    PlannedStop,
+    PlanRequest,
+    PlanResponse,
+)
 
 
 class PlannerService:

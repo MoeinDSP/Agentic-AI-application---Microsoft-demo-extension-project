@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any
 
@@ -17,7 +18,7 @@ class JsonFormatter(logging.Formatter):
             payload["environment"] = record.environment
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
-        return str(payload).replace("'", '"')
+        return json.dumps(payload)
 
 
 def configure_logging(settings: Settings) -> None:

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from agent3_mcp.models.tools import (
@@ -10,6 +12,7 @@ from agent3_mcp.models.tools import (
 from agent3_mcp.services.tools import ToolService, get_tool_service
 
 router = APIRouter()
+ToolDependency = Annotated[ToolService, Depends(get_tool_service)]
 
 
 @router.get("/health", response_model=HealthResponse, tags=["health"])
@@ -24,7 +27,7 @@ async def healthcheck() -> HealthResponse:
 )
 async def route_estimate(
     request: RouteEstimateRequest,
-    tools: ToolService = Depends(get_tool_service),
+    tools: ToolDependency,
 ) -> RouteEstimateResponse:
     return tools.estimate_route(request)
 
@@ -36,6 +39,6 @@ async def route_estimate(
 )
 async def place_details(
     request: PlaceDetailsRequest,
-    tools: ToolService = Depends(get_tool_service),
+    tools: ToolDependency,
 ) -> PlaceDetailsResponse:
     return tools.get_place_details(request)
