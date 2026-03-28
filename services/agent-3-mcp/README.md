@@ -43,7 +43,7 @@ make install
 ## Run
 
 ```bash
-uv run uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1 --port 8090
+uv run python -m uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1 --port 8090
 ```
 
 Or:
