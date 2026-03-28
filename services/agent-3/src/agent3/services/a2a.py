@@ -20,7 +20,8 @@ class AgentCardService:
         return AgentCard(
             name="agent-3",
             description=(
-                "Local-first itinerary planning agent with deterministic MVP planning output."
+                "Local-first itinerary planning agent with deterministic greedy "
+                "MVP planning."
             ),
             version=self._settings.service_version,
             base_url=self._settings.public_base_url.rstrip("/"),
@@ -46,7 +47,7 @@ class AgentCardService:
                 AgentSkill(
                     id="itinerary-planning",
                     name="Itinerary Planning",
-                    description="Builds a deterministic placeholder day plan from candidate stops.",
+                    description="Builds a deterministic greedy day plan from candidate stops.",
                     tags=["planning", "itinerary", "local-first"],
                 )
             ],
@@ -60,7 +61,7 @@ class AgentCardService:
                     "This agent card describes an A2A-ready HTTP boundary, "
                     "not a full A2A spec implementation."
                 ),
-                "Planner behavior remains deterministic placeholder logic in this MVP stage.",
+                "Planner behavior uses a deterministic greedy scheduler with zero travel time.",
             ],
         )
 
