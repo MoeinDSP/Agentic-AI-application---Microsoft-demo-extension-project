@@ -1,11 +1,11 @@
 # Agent 3
 
 Agent 3 is a planning service that accepts a day plan request and returns a
-deterministic placeholder itinerary. The current implementation is local-first
-and intentionally simple so the API contract can stabilize before real planning
+deterministic MVP itinerary. The current implementation is local-first and
+intentionally simple so the API contract can stabilize before richer planning
 logic is added.
 
-It now also exposes a minimal A2A-compatible HTTP boundary for orchestrator
+It also exposes a minimal A2A-compatible HTTP boundary for orchestrator
 discovery and invocation. This is A2A-shaped and A2A-ready, not a full
 spec-complete A2A implementation.
 
@@ -99,8 +99,26 @@ Copy `.env.example` to `.env` if needed.
 
 - `api/` owns HTTP routing only.
 - `models/` owns request and response contracts.
-- `services/` owns placeholder planning behavior.
+- `services/` owns deterministic planner behavior.
 - `core/` owns config and logging.
+
+## Planner MVP Behavior
+
+The current planner uses a deterministic greedy algorithm:
+
+- Sort places by `priority` descending.
+- Preserve input order when priorities tie.
+- Start scheduling at `day_start`.
+- Assume zero travel time between stops.
+- Add places one by one while each stop still ends on or before `day_end`.
+- Drop any place that no longer fits with reason `insufficient_time`.
+
+Response semantics:
+
+- `ordered_stops` includes scheduled places with `start_time` and `end_time`.
+- `dropped_places` includes unscheduled places and a drop reason.
+- `feasibility` is `true` when at least one stop was scheduled.
+- `feasibility` is `false` when the planner cannot schedule any stop in the day window.
 
 ## A2A Support
 
@@ -114,7 +132,8 @@ Current limitations:
 
 - This is not a full A2A protocol implementation.
 - Authentication is still a local-first placeholder.
-- Planner behavior is still deterministic stub logic.
+- The planner is deterministic but still intentionally simple.
+- Travel time and route estimation are not integrated yet.
 
 ## Example Requests
 
@@ -122,6 +141,37 @@ Health:
 
 ```bash
 curl http://127.0.0.1:8080/health
+```
+
+Direct planning request:
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
+    "day_start": "09:00:00",
+    "day_end": "11:00:00",
+    "transport_preferences": ["walk"],
+    "places": [
+      {
+        "id": "colosseum",
+        "name": "Colosseum",
+        "lat": 41.8902,
+        "lng": 12.4922,
+        "estimated_duration_minutes": 90,
+        "priority": 5
+      },
+      {
+        "id": "pantheon",
+        "name": "Pantheon",
+        "lat": 41.8986,
+        "lng": 12.4769,
+        "estimated_duration_minutes": 45,
+        "priority": 4
+      }
+    ]
+  }'
 ```
 
 Agent Card:
@@ -162,7 +212,7 @@ curl -X POST http://127.0.0.1:8080/a2a \
 ```text
 orchestrator
   -> agent-3 A2A boundary
-  -> planner stub
+  -> deterministic planner MVP
   -> future tool service integrations
 ```
 
@@ -193,7 +243,11 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 
 - Real A2A protocol features can replace the current HTTP/JSON adapter without a
   full rewrite of the planning API.
-- Real planner logic should replace the deterministic placeholder service
-  without changing the API surface.
+- Route estimation should be added next so travel time is no longer assumed to
+  be zero.
+- Richer constraints should be added next, such as opening hours and hard stop
+  ordering rules.
+- MCP integration should be added later through `agent-3-mcp`, not embedded
+  into the planner boundary.
 - Future tool calls should flow into `agent-3-mcp` instead of being embedded
   directly into the agent boundary.
