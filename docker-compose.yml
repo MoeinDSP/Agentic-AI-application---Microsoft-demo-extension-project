@@ -1,0 +1,23 @@
+services:
+  place-recommender-agent:
+    build:
+      context: place-recommender-agent
+      dockerfile: Dockerfile
+    image: place-recommender-agent:v1
+    container_name: place-recommender-agent
+    env_file:
+      - .env
+    volumes:
+      - ./place-recommender-agent/app:/place-recommender-agent/app
+    working_dir: /place-recommender-agent/app
+    ports:
+      - "8000:8000"
+    # command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: [ "sleep", "infinity" ]
+    networks:
+      - place_recommender_network
+
+networks:
+  place_recommender_network:
+    name: place_recommender_network
+    driver: bridge

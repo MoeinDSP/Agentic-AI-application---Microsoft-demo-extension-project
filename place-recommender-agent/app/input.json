@@ -1,0 +1,32 @@
+{
+    "input": {
+        "country": "",
+        "city": "",
+        "category": "",
+        "num_min_places": 0,
+        "num_max_places": 10,
+        "accomodation_location": "",
+        "total_budget": 0,
+        "other_preferences": ""
+    },
+    "output": {
+        "error_message": "",
+        "places": [
+            {
+                "name": "",
+                "description": "",
+                "lat": "",
+                "long": "",
+                "image_url": "",
+                "opening_hours": [
+                    {
+                        "day": "",
+                        "hours": ""
+                    }
+                ],
+                "minimum_visiting_duration": 0,
+                "other_details": "ranking, price, etc."
+            }
+        ]
+    }
+}

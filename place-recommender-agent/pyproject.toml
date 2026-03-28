@@ -1,0 +1,12 @@
+[project]
+name = "place-recommender-agent"
+version = "0.1.0"
+description = "Place recommender agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "uvicorn[standard]>=0.32.0",
+    "pydantic-ai>=0.0.14",
+    "fasta2a>=0.6.0",
+    "logfire[pydantic]>=3.0.0",
+]
