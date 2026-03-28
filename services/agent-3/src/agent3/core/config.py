@@ -7,8 +7,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = Field(default="agent-3")
     environment: str = Field(default="development")
+    service_version: str = Field(default="0.1.0")
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8080)
+    public_base_url: str = Field(default="http://127.0.0.1:8080")
+    agent_card_path: str = Field(default="/.well-known/agent-card.json")
+    a2a_path: str = Field(default="/a2a")
     log_level: str = Field(default="INFO")
 
     model_config = SettingsConfigDict(
