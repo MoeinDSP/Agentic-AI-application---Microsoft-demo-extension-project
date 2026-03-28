@@ -10,7 +10,7 @@ from agent3.models.plan import (
 
 
 class PlannerService:
-    def build_plan(self, request: PlanRequest) -> PlanResponse:
+    def plan_day(self, request: PlanRequest) -> PlanResponse:
         available_minutes = self._time_to_minutes(request.day_end) - self._time_to_minutes(
             request.day_start
         )
@@ -61,6 +61,9 @@ class PlannerService:
             notes=notes,
             feasibility=bool(ordered_stops),
         )
+
+    def build_plan(self, request: PlanRequest) -> PlanResponse:
+        return self.plan_day(request)
 
     def _time_to_minutes(self, value: time) -> int:
         return value.hour * 60 + value.minute

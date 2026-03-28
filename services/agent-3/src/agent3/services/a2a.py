@@ -75,7 +75,7 @@ class A2AService:
         self._planner = planner
 
     def handle_request(self, request: A2ARequest) -> A2AResponse:
-        output = self._planner.build_plan(request.input)
+        output = self._planner.plan_day(request.input)
         return A2AResponse(
             request_id=request.request_id,
             status="completed",

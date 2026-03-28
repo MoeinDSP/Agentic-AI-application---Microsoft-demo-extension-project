@@ -47,4 +47,4 @@ async def plan_day(
     request: PlanRequest,
     planner: PlannerDependency,
 ) -> PlanResponse:
-    return planner.build_plan(request)
+    return planner.plan_day(request)
