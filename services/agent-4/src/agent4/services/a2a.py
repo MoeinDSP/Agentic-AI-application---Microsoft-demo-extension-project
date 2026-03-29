@@ -2,11 +2,14 @@ from functools import lru_cache
 
 from agent4.core.config import Settings, get_settings
 from agent4.models.a2a import (
+    A2ARequest,
+    A2AResponse,
     AgentAuth,
     AgentCard,
     AgentEndpoint,
     AgentSkill,
 )
+from agent4.services.recommender import RecommenderService, get_recommender_service
 
 
 class AgentCardService:
@@ -33,6 +36,11 @@ class AgentCardService:
                     path="/v1/recommend-meal",
                     method="POST",
                     description="Direct typed meal recommendation API.",
+                ),
+                AgentEndpoint(
+                    path=self._settings.a2a_path,
+                    method="POST",
+                    description="Minimal A2A-shaped meal recommendation endpoint.",
                 ),
             ],
             skills=[
@@ -64,3 +72,29 @@ class AgentCardService:
 @lru_cache(maxsize=1)
 def get_agent_card_service() -> AgentCardService:
     return AgentCardService(get_settings())
+
+
+class A2AService:
+    def __init__(self, recommender: RecommenderService) -> None:
+        self._recommender = recommender
+
+    def handle_request(self, request: A2ARequest) -> A2AResponse:
+        if request.action != "recommend_meal":
+            raise ValueError("action must be recommend_meal")
+
+        output = self._recommender.recommend(request.input)
+        return A2AResponse(
+            request_id=request.request_id,
+            status="completed",
+            result_type="meal_recommendations",
+            output=output,
+            notes=[
+                "minimal_a2a_boundary",
+                "action=recommend_meal",
+            ],
+        )
+
+
+@lru_cache(maxsize=1)
+def get_a2a_service() -> A2AService:
+    return A2AService(get_recommender_service())
