@@ -47,7 +47,10 @@ class AgentCardService:
                 AgentSkill(
                     id="itinerary-planning",
                     name="Itinerary Planning",
-                    description="Builds a deterministic greedy day plan from candidate stops.",
+                    description=(
+                        "Builds a deterministic greedy day plan from candidate "
+                        "stops using walk, drive, or transit travel estimates."
+                    ),
                     tags=["planning", "itinerary", "local-first"],
                 )
             ],
