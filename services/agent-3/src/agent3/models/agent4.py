@@ -37,3 +37,18 @@ class RestaurantCandidate(BaseModel):
 
 class MealRecommendationResponse(BaseModel):
     candidates: list[RestaurantCandidate]
+
+
+class Agent4A2ARequest(BaseModel):
+    request_id: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+    input: MealRecommendationRequest
+    accepted_content_types: list[str] = Field(default_factory=lambda: ["application/json"])
+
+
+class Agent4A2AResponse(BaseModel):
+    request_id: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    result_type: str = Field(min_length=1)
+    output: MealRecommendationResponse
+    notes: list[str] = Field(default_factory=list)
