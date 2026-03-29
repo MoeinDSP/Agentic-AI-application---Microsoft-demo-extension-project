@@ -111,6 +111,8 @@ docker run --rm -p 8090:8090 -e PORT=8090 agent-3-mcp:local
 
 ## Future Integration Notes
 
+- Supported route-estimate modes are `walk`, `drive`, and `transit`.
+- The mode influences the deterministic placeholder duration returned today.
 - Real route and place providers should replace the deterministic placeholders.
 - The current HTTP tool design is intentionally narrow so it can be wrapped or
   upgraded to MCP later without redesigning the service boundary.

@@ -96,6 +96,7 @@ Copy `.env.example` to `.env` if needed.
 - `AGENT3_MCP_BASE_URL`: base URL for the independent `agent-3-mcp` tool service.
 - `AGENT3_MCP_TIMEOUT_SECONDS`: short timeout for route-estimate HTTP calls.
 - `AGENT3_FALLBACK_TRAVEL_MINUTES`: deterministic per-leg fallback when MCP route estimation fails.
+- `AGENT3_DEFAULT_TRANSPORT_MODE`: default transport mode when no preference is provided.
 - `AGENT3_LOG_LEVEL`: logging level.
 
 ## Architecture Notes
@@ -112,6 +113,9 @@ The current planner uses a deterministic greedy algorithm:
 - Sort places by `priority` descending.
 - Preserve input order when priorities tie.
 - Start scheduling at `day_start`.
+- Resolve a single effective transport mode from `transport_preferences`.
+- Supported modes are `walk`, `drive`, and `transit`.
+- Default to `walk` when no transport preference is provided.
 - Request travel time over HTTP from `agent-3-mcp` for:
   - start location -> first stop
   - previous accepted stop -> next candidate stop
@@ -125,6 +129,7 @@ Response semantics:
 - `dropped_places` includes unscheduled places and a drop reason.
 - `feasibility` is `true` when at least one stop was scheduled.
 - `feasibility` is `false` when the planner cannot schedule any stop in the day window.
+- `selected_transport_mode` shows the effective mode used for planning.
 - `total_travel_minutes` is the sum of accepted travel legs.
 - `total_visit_minutes` is the sum of accepted visit durations.
 
@@ -142,6 +147,7 @@ Current limitations:
 - Authentication is still a local-first placeholder.
 - The planner is deterministic but still intentionally simple.
 - Travel time is route-aware, but the planner is still greedy and not globally optimized.
+- Only one effective transport mode is used for the whole plan.
 
 ## Example Requests
 
@@ -211,6 +217,7 @@ Travel-aware response shape:
     "transport_preferences=walk"
   ],
   "feasibility": true,
+  "selected_transport_mode": "walk",
   "total_travel_minutes": 10,
   "total_visit_minutes": 90
 }
@@ -308,6 +315,7 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 - Meal insertion is not modeled yet.
 - Advanced transport-mode optimization is not modeled yet.
 - Global route optimization is not modeled yet.
+- Multi-modal plans are not modeled yet.
 - Richer constraints should be added next, such as opening hours and hard stop ordering rules.
 - Future tool calls should flow into `agent-3-mcp` instead of being embedded
   directly into the agent boundary.
