@@ -48,7 +48,7 @@ make install
 ## Run
 
 ```bash
-uv run python -m uvicorn agent3.main:app --factory --reload --host 127.0.0.1 --port 8080
+uv run python -m uvicorn agent3.main:create_app --factory --reload --host 127.0.0.1 --port 8080
 ```
 
 Or:
@@ -355,7 +355,7 @@ uv run python -m uvicorn agent4.main:app --factory --reload --host 127.0.0.1 --p
 ```bash
 cd services/agent-3
 uv sync --group dev
-uv run python -m uvicorn agent3.main:app --factory --reload --host 127.0.0.1 --port 8080
+uv run python -m uvicorn agent3.main:create_app --factory --reload --host 127.0.0.1 --port 8080
 ```
 
 ## Docker Usage

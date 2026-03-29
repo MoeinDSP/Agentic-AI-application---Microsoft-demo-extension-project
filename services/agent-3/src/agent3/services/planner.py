@@ -283,7 +283,7 @@ class PlannerService:
         meal_request = MealRecommendationRequest(
             time_of_day="lunch",
             search_center=current_origin,
-            search_radius_meters=1000,
+            search_radius_meters=2500,
             budget_per_meal_per_person=request.budget_per_meal_per_person,
             preferences=request.meal_preferences,
         )

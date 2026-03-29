@@ -33,7 +33,7 @@ uv sync --group dev
 ## Run
 
 ```bash
-uv run python -m uvicorn agent4.main:app --factory --reload --host 127.0.0.1 --port 8070
+uv run python -m uvicorn agent4.main:create_app --factory --reload --host 127.0.0.1 --port 8070
 ```
 
 Local development order when used with Agent 3:
