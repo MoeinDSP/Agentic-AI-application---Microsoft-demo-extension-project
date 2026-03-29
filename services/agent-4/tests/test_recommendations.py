@@ -19,5 +19,5 @@ def test_recommend_meal_returns_candidates() -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload["candidates"]) == 3
-    assert payload["candidates"][0]["id"] == "trattoria-della-luce"
+    assert len(payload["candidates"]) == 5
+    assert payload["candidates"][0]["id"] == "mercato-panini"
