@@ -165,6 +165,7 @@ def test_v1_plan_and_a2a_are_travel_aware_with_mocked_mcp() -> None:
     assert plan_response.json()["ordered_stops"][0]["arrival_time"] == "09:10:00"
     assert plan_response.json()["ordered_stops"][0]["travel_minutes_from_previous"] == 10
     assert plan_response.json()["total_travel_minutes"] == 10
+    assert plan_response.json()["selected_transport_mode"] == "walk"
     assert plan_response.json() == a2a_response.json()["output"]
 
 
@@ -206,6 +207,72 @@ def test_a2a_rejects_empty_places_list() -> None:
         "/a2a",
         json={
             "request_id": "req-empty",
+            "action": "plan_day",
+            "input": payload,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_v1_plan_defaults_to_walk_when_no_transport_preferences_are_sent() -> None:
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["transport_preferences"] = []
+
+    response = client.post("/v1/plan", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["selected_transport_mode"] == "walk"
+
+
+def test_v1_plan_and_a2a_support_drive_mode() -> None:
+    planner = PlannerService(FixedRouteClient(5))
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["transport_preferences"] = ["drive"]
+
+    try:
+        plan_response = client.post("/v1/plan", json=payload)
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-drive",
+                "action": "plan_day",
+                "input": payload,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert plan_response.json()["selected_transport_mode"] == "drive"
+    assert "selected_transport_mode=drive" in plan_response.json()["notes"]
+    assert plan_response.json() == a2a_response.json()["output"]
+
+
+def test_v1_plan_rejects_unsupported_transport_mode() -> None:
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["transport_preferences"] = ["scooter"]
+
+    response = client.post("/v1/plan", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_a2a_rejects_unsupported_transport_mode() -> None:
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["transport_preferences"] = ["scooter"]
+
+    response = client.post(
+        "/a2a",
+        json={
+            "request_id": "req-unsupported",
             "action": "plan_day",
             "input": payload,
         },

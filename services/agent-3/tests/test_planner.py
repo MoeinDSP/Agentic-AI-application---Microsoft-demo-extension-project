@@ -7,10 +7,12 @@ class FixedRouteClient:
     def __init__(self, travel_minutes: int) -> None:
         self._travel_minutes = travel_minutes
 
-    def estimate_route(self, **_: object) -> TravelEstimate:
+    def estimate_route(self, **kwargs: object) -> TravelEstimate:
+        transport_preferences = kwargs.get("transport_preferences", [])
+        mode = transport_preferences[0] if transport_preferences else "walk"
         return TravelEstimate(
             source="mcp",
-            mode="walk",
+            mode=mode,
             estimated_duration_minutes=self._travel_minutes,
             notes=["mock_mcp"],
         )
@@ -217,3 +219,45 @@ def test_planner_uses_fallback_minutes_when_route_estimation_fails() -> None:
     assert response.total_travel_minutes == 12
     assert "travel_time_source=fallback" in response.notes
     assert "fallback_travel_minutes=12" in response.notes
+
+
+def test_planner_defaults_to_walk_when_transport_preferences_missing() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "pantheon",
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "estimated_duration_minutes": 45,
+                "priority": 4,
+            }
+        ]
+    )
+    request.transport_preferences = []
+
+    response = PlannerService(FixedRouteClient(10)).plan_day(request)
+
+    assert response.selected_transport_mode == "walk"
+    assert "selected_transport_mode=walk" in response.notes
+
+
+def test_planner_uses_explicit_drive_mode() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "pantheon",
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "estimated_duration_minutes": 45,
+                "priority": 4,
+            }
+        ]
+    )
+    request.transport_preferences = ["drive"]
+
+    response = PlannerService(FixedRouteClient(5)).plan_day(request)
+
+    assert response.selected_transport_mode == "drive"
+    assert "selected_transport_mode=drive" in response.notes
