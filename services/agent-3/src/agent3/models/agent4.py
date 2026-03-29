@@ -4,6 +4,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from agent3.models.plan import Coordinates
 
+AGENT4_INVOCATION_MODE_HTTP = "http"
+AGENT4_INVOCATION_MODE_A2A = "a2a"
+SUPPORTED_AGENT4_INVOCATION_MODES = {
+    AGENT4_INVOCATION_MODE_HTTP,
+    AGENT4_INVOCATION_MODE_A2A,
+}
+
 
 class MealRecommendationRequest(BaseModel):
     time_of_day: Literal["breakfast", "lunch", "dinner"] = "lunch"
