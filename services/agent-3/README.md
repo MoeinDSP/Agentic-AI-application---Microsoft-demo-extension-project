@@ -97,6 +97,7 @@ Copy `.env.example` to `.env` if needed.
 - `AGENT3_MCP_TIMEOUT_SECONDS`: short timeout for route-estimate HTTP calls.
 - `AGENT3_AGENT4_BASE_URL`: base URL for the independent `agent-4` meal service.
 - `AGENT3_AGENT4_TIMEOUT_SECONDS`: short timeout for meal recommendation HTTP calls.
+- `AGENT3_AGENT4_INVOCATION_MODE`: `http` or `a2a` for Agent 4 lunch enrichment. Default is `http`.
 - `AGENT3_FALLBACK_TRAVEL_MINUTES`: deterministic per-leg fallback when MCP route estimation fails.
 - `AGENT3_DEFAULT_TRANSPORT_MODE`: default transport mode when no preference is provided.
 - `AGENT3_LOG_LEVEL`: logging level.
@@ -131,8 +132,11 @@ The current planner uses a deterministic greedy algorithm:
 - If Agent 4 is reachable and returns candidates, the lunch stop is upgraded to a restaurant-backed meal stop.
 - Agent 3 remains responsible for lunch timing; Agent 4 only returns ranked restaurant candidates.
 - Agent 3 uses `meal_preferences` and `budget_per_meal_per_person` when building the Agent 4 request.
+- Agent 3 can call Agent 4 in either direct HTTP mode or A2A mode.
+- `http` mode calls Agent 4 `POST /v1/recommend-meal`.
+- `a2a` mode calls Agent 4 `POST /a2a` with `action: "recommend_meal"`.
 - If lunch cannot fit, the planner keeps the place plan and adds `lunch_not_inserted` to `notes`.
-- If Agent 4 is unavailable, Agent 3 keeps the synthetic lunch stop and adds `agent4_unavailable_using_synthetic_lunch`.
+- If the selected Agent 4 invocation path fails, Agent 3 keeps the synthetic lunch stop and adds `agent4_unavailable_using_synthetic_lunch`.
 - If Agent 4 returns no candidates, Agent 3 keeps the synthetic lunch stop and adds `no_restaurant_candidate_found`.
 - Add places one by one while travel time plus visit duration still finishes on or before `day_end`.
 - Drop any place that no longer fits with reason `insufficient_time`.
@@ -165,7 +169,7 @@ Current limitations:
 - The planner is deterministic but still intentionally simple.
 - Travel time is route-aware, but the planner is still greedy and not globally optimized.
 - Only one effective transport mode is used for the whole plan.
-- Lunch enrichment uses a deterministic mock Agent 4 service over HTTP.
+- Lunch enrichment uses a deterministic mock Agent 4 service over HTTP or via its minimal A2A-compatible boundary.
 
 ## Example Requests
 
@@ -265,7 +269,8 @@ Travel-aware response shape:
     "feasibility=true_when_at_least_one_stop_is_scheduled",
     "selected_transport_mode=walk",
     "transport_preferences=walk",
-    "lunch_inserted"
+    "lunch_inserted",
+    "agent4_invocation_mode=http"
   ],
   "feasibility": true,
   "selected_transport_mode": "walk",
@@ -349,7 +354,7 @@ uv run python -m uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1
 ```bash
 cd services/agent-4
 uv sync --group dev
-uv run python -m uvicorn agent4.main:app --factory --reload --host 127.0.0.1 --port 8070
+uv run python -m uvicorn agent4.main:create_app --factory --reload --host 127.0.0.1 --port 8070
 ```
 
 ```bash
@@ -379,6 +384,8 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 - Opening hours are supported only as simple same-day place windows with no waiting logic.
 - Lunch is supported as one scheduled stop inside a configured time window.
 - Restaurant enrichment comes from a deterministic mock Agent 4 service.
+- Agent 4 invocation defaults to direct HTTP and can be switched to A2A mode with config.
+- If the selected Agent 4 mode fails, Agent 3 falls back directly to a synthetic lunch stop.
 - There is no real restaurant search backend yet.
 - Dinner is not modeled yet.
 - There is no LLM-based preference interpretation.
