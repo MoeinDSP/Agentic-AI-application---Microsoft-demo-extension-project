@@ -279,3 +279,84 @@ def test_a2a_rejects_unsupported_transport_mode() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_v1_plan_and_a2a_drop_place_when_closed_at_arrival() -> None:
+    planner = PlannerService(FixedRouteClient(15))
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["places"] = [
+        {
+            "id": "colosseum",
+            "name": "Colosseum",
+            "lat": 41.8902,
+            "lng": 12.4922,
+            "estimated_duration_minutes": 90,
+            "priority": 5,
+            "opens_at": "10:00:00",
+            "closes_at": "18:00:00",
+        }
+    ]
+
+    try:
+        plan_response = client.post("/v1/plan", json=payload)
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-closed",
+                "action": "plan_day",
+                "input": payload,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert plan_response.json()["ordered_stops"] == []
+    assert plan_response.json()["dropped_places"][0]["reason"] == "closed_at_arrival"
+    assert plan_response.json() == a2a_response.json()["output"]
+
+
+def test_v1_plan_and_a2a_drop_place_when_visit_ends_after_closing() -> None:
+    planner = PlannerService(FixedRouteClient(15))
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["places"] = [
+        {
+            "id": "colosseum",
+            "name": "Colosseum",
+            "lat": 41.8902,
+            "lng": 12.4922,
+            "estimated_duration_minutes": 90,
+            "priority": 5,
+            "opens_at": "09:00:00",
+            "closes_at": "10:00:00",
+        }
+    ]
+
+    try:
+        plan_response = client.post("/v1/plan", json=payload)
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-closes-early",
+                "action": "plan_day",
+                "input": payload,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert plan_response.json()["ordered_stops"] == []
+    assert (
+        plan_response.json()["dropped_places"][0]["reason"]
+        == "closes_before_visit_ends"
+    )
+    assert plan_response.json() == a2a_response.json()["output"]

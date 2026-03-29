@@ -261,3 +261,71 @@ def test_planner_uses_explicit_drive_mode() -> None:
 
     assert response.selected_transport_mode == "drive"
     assert "selected_transport_mode=drive" in response.notes
+
+
+def test_planner_treats_missing_opening_hours_as_unrestricted() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "pantheon",
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "estimated_duration_minutes": 45,
+                "priority": 4,
+            }
+        ]
+    )
+
+    response = PlannerService(FixedRouteClient(10)).plan_day(request)
+
+    assert [stop.place_id for stop in response.ordered_stops] == ["pantheon"]
+    assert response.dropped_places == []
+
+
+def test_planner_drops_place_when_arrival_is_before_opening_time() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 90,
+                "priority": 5,
+                "opens_at": "10:00:00",
+                "closes_at": "18:00:00",
+            }
+        ]
+    )
+
+    response = PlannerService(FixedRouteClient(15)).plan_day(request)
+
+    assert response.ordered_stops == []
+    assert response.dropped_places[0].place_id == "colosseum"
+    assert response.dropped_places[0].reason == "closed_at_arrival"
+    assert response.feasibility is False
+
+
+def test_planner_drops_place_when_visit_would_end_after_closing_time() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 90,
+                "priority": 5,
+                "opens_at": "09:00:00",
+                "closes_at": "10:00:00",
+            }
+        ]
+    )
+
+    response = PlannerService(FixedRouteClient(15)).plan_day(request)
+
+    assert response.ordered_stops == []
+    assert response.dropped_places[0].place_id == "colosseum"
+    assert response.dropped_places[0].reason == "closes_before_visit_ends"
+    assert response.feasibility is False
