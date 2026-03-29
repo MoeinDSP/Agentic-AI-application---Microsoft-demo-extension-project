@@ -5,7 +5,7 @@ import httpx
 from agent3.core.config import Settings, get_settings
 from agent3.core.logging import get_logger
 from agent3.models.mcp import MCPRouteEstimateRequest, MCPRouteEstimateResponse, TravelEstimate
-from agent3.models.plan import Coordinates
+from agent3.models.plan import SUPPORTED_TRANSPORT_MODES, Coordinates
 
 
 class RouteEstimationError(Exception):
@@ -24,7 +24,7 @@ class MCPRouteClient:
         destination: Coordinates,
         transport_preferences: list[str],
     ) -> TravelEstimate:
-        mode = transport_preferences[0] if transport_preferences else "walk"
+        mode = self.resolve_transport_mode(transport_preferences)
         request = MCPRouteEstimateRequest(
             origin=origin,
             destination=destination,
@@ -68,6 +68,15 @@ class MCPRouteClient:
             estimated_duration_minutes=payload.estimated_duration_minutes,
             notes=payload.notes,
         )
+
+    def resolve_transport_mode(self, transport_preferences: list[str]) -> str:
+        if not transport_preferences:
+            return self._settings.default_transport_mode
+
+        mode = transport_preferences[0]
+        if mode not in SUPPORTED_TRANSPORT_MODES:
+            raise RouteEstimationError("Transport mode is unsupported")
+        return mode
 
 
 @lru_cache(maxsize=1)

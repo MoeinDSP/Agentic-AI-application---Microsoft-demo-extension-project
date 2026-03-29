@@ -32,7 +32,7 @@ def test_plan_request_normalizes_transport_preferences() -> None:
             "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
             "day_start": "09:00:00",
             "day_end": "18:00:00",
-            "transport_preferences": [" Walk ", "walk", "METRO"],
+            "transport_preferences": [" Walk ", "walk", "DRIVE"],
             "places": [
                 {
                     "id": "pantheon",
@@ -46,4 +46,4 @@ def test_plan_request_normalizes_transport_preferences() -> None:
         }
     )
 
-    assert request.transport_preferences == ["walk", "metro"]
+    assert request.transport_preferences == ["walk", "drive"]

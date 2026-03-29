@@ -2,6 +2,8 @@ from datetime import time
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+SUPPORTED_TRANSPORT_MODES = {"walk", "drive", "transit"}
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -34,6 +36,14 @@ class PlanRequest(BaseModel):
     @classmethod
     def normalize_transport_preferences(cls, value: list[str]) -> list[str]:
         normalized = [item.strip().lower() for item in value if item.strip()]
+        unsupported_modes = [
+            mode for mode in normalized if mode not in SUPPORTED_TRANSPORT_MODES
+        ]
+        if unsupported_modes:
+            raise ValueError(
+                "transport_preferences must contain only supported modes: "
+                "walk, drive, transit"
+            )
         return list(dict.fromkeys(normalized))
 
     @model_validator(mode="after")
