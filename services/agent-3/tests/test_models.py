@@ -99,3 +99,59 @@ def test_plan_request_rejects_invalid_opening_window() -> None:
                 ],
             }
         )
+
+
+def test_plan_request_supports_lunch_configuration() -> None:
+    request = PlanRequest.model_validate(
+        {
+            "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
+            "day_start": "09:00:00",
+            "day_end": "18:00:00",
+            "transport_preferences": ["walk"],
+            "lunch_required": True,
+            "lunch_time_window_start": "12:30:00",
+            "lunch_time_window_end": "14:30:00",
+            "lunch_duration_minutes": 45,
+            "places": [
+                {
+                    "id": "pantheon",
+                    "name": "Pantheon",
+                    "lat": 41.8986,
+                    "lng": 12.4769,
+                    "estimated_duration_minutes": 45,
+                    "priority": 4,
+                }
+            ],
+        }
+    )
+
+    assert request.lunch_required is True
+    assert request.lunch_time_window_start.isoformat() == "12:30:00"
+    assert request.lunch_time_window_end.isoformat() == "14:30:00"
+    assert request.lunch_duration_minutes == 45
+
+
+def test_plan_request_rejects_invalid_lunch_window() -> None:
+    with pytest.raises(ValidationError):
+        PlanRequest.model_validate(
+            {
+                "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
+                "day_start": "09:00:00",
+                "day_end": "18:00:00",
+                "transport_preferences": ["walk"],
+                "lunch_required": True,
+                "lunch_time_window_start": "14:00:00",
+                "lunch_time_window_end": "12:00:00",
+                "lunch_duration_minutes": 45,
+                "places": [
+                    {
+                        "id": "pantheon",
+                        "name": "Pantheon",
+                        "lat": 41.8986,
+                        "lng": 12.4769,
+                        "estimated_duration_minutes": 45,
+                        "priority": 4,
+                    }
+                ],
+            }
+        )

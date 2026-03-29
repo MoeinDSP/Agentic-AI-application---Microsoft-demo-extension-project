@@ -1,4 +1,5 @@
 from datetime import time
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -50,6 +51,10 @@ class PlanRequest(BaseModel):
     day_end: time
     transport_preferences: list[str] = Field(default_factory=list)
     places: list[PlaceInput] = Field(min_length=1)
+    lunch_required: bool = False
+    lunch_time_window_start: time = time(hour=12, minute=0)
+    lunch_time_window_end: time = time(hour=14, minute=0)
+    lunch_duration_minutes: int = Field(default=60, gt=0)
 
     @field_validator("transport_preferences")
     @classmethod
@@ -69,10 +74,15 @@ class PlanRequest(BaseModel):
     def validate_day_window(self) -> "PlanRequest":
         if self.day_end <= self.day_start:
             raise ValueError("day_end must be later than day_start")
+        if self.lunch_time_window_end <= self.lunch_time_window_start:
+            raise ValueError(
+                "lunch_time_window_end must be later than lunch_time_window_start"
+            )
         return self
 
 
 class PlannedStop(BaseModel):
+    stop_type: Literal["place", "lunch"] = STOP_TYPE_PLACE
     place_id: str
     place_name: str
     sequence: int
