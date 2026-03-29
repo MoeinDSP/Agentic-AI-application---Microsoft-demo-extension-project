@@ -6,11 +6,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 SUPPORTED_TRANSPORT_MODES = {"walk", "drive", "transit"}
 STOP_TYPE_PLACE = "place"
 STOP_TYPE_LUNCH = "lunch"
+STOP_TYPE_MEAL = "meal"
 DROP_REASON_INSUFFICIENT_TIME = "insufficient_time"
 DROP_REASON_CLOSED_AT_ARRIVAL = "closed_at_arrival"
 DROP_REASON_CLOSES_BEFORE_VISIT_ENDS = "closes_before_visit_ends"
 LUNCH_INSERTED_NOTE = "lunch_inserted"
 LUNCH_NOT_INSERTED_NOTE = "lunch_not_inserted"
+AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE = (
+    "agent4_unavailable_using_synthetic_lunch"
+)
+NO_RESTAURANT_CANDIDATE_FOUND_NOTE = "no_restaurant_candidate_found"
 
 
 class HealthResponse(BaseModel):
