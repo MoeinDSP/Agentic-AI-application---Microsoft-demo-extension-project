@@ -47,8 +47,10 @@ class PlannedStop(BaseModel):
     place_id: str
     place_name: str
     sequence: int
+    arrival_time: time
     start_time: time
     end_time: time
+    travel_minutes_from_previous: int = Field(ge=0)
     estimated_duration_minutes: int
 
 
@@ -62,3 +64,5 @@ class PlanResponse(BaseModel):
     dropped_places: list[DroppedPlace]
     notes: list[str]
     feasibility: bool
+    total_travel_minutes: int = Field(ge=0)
+    total_visit_minutes: int = Field(ge=0)
