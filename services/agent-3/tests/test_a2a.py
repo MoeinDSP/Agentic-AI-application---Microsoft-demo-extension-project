@@ -1,6 +1,29 @@
 from fastapi.testclient import TestClient
 
 from agent3.main import app
+from agent3.models.mcp import TravelEstimate
+from agent3.services.a2a import A2AService, get_a2a_service
+from agent3.services.planner import PlannerService, get_planner_service
+
+
+class FixedRouteClient:
+    def __init__(self, travel_minutes: int) -> None:
+        self._travel_minutes = travel_minutes
+
+    def estimate_route(self, **_: object) -> TravelEstimate:
+        return TravelEstimate(
+            source="mcp",
+            mode="walk",
+            estimated_duration_minutes=self._travel_minutes,
+            notes=["mock_mcp"],
+        )
+
+
+class FailingRouteClient:
+    def estimate_route(self, **_: object) -> TravelEstimate:
+        from agent3.services.mcp_client import RouteEstimationError
+
+        raise RouteEstimationError("boom")
 
 
 def _plan_payload() -> dict[str, object]:
@@ -116,6 +139,62 @@ def test_v1_plan_rejects_empty_places_list() -> None:
     response = client.post("/v1/plan", json=payload)
 
     assert response.status_code == 422
+
+
+def test_v1_plan_and_a2a_are_travel_aware_with_mocked_mcp() -> None:
+    planner = PlannerService(FixedRouteClient(10))
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+
+    try:
+        plan_response = client.post("/v1/plan", json=_plan_payload())
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-travel-aware",
+                "action": "plan_day",
+                "input": _plan_payload(),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert plan_response.json()["ordered_stops"][0]["arrival_time"] == "09:10:00"
+    assert plan_response.json()["ordered_stops"][0]["travel_minutes_from_previous"] == 10
+    assert plan_response.json()["total_travel_minutes"] == 10
+    assert plan_response.json() == a2a_response.json()["output"]
+
+
+def test_v1_plan_and_a2a_surface_fallback_when_mcp_fails() -> None:
+    planner = PlannerService(
+        route_client=FailingRouteClient(),
+        fallback_travel_minutes=7,
+    )
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+
+    try:
+        plan_response = client.post("/v1/plan", json=_plan_payload())
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-fallback",
+                "action": "plan_day",
+                "input": _plan_payload(),
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert "travel_time_source=fallback" in plan_response.json()["notes"]
+    assert "fallback_travel_minutes=7" in plan_response.json()["notes"]
+    assert plan_response.json() == a2a_response.json()["output"]
 
 
 def test_a2a_rejects_empty_places_list() -> None:
