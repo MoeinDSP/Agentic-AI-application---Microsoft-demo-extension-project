@@ -119,6 +119,10 @@ The current planner uses a deterministic greedy algorithm:
 - Request travel time over HTTP from `agent-3-mcp` for:
   - start location -> first stop
   - previous accepted stop -> next candidate stop
+- Treat places without `opens_at` and `closes_at` as unrestricted.
+- Drop a place with `closed_at_arrival` when arrival happens before opening or at/after closing.
+- Drop a place with `closes_before_visit_ends` when the visit would run past closing.
+- Do not wait for a place to open. The planner either schedules it immediately or drops it.
 - Add places one by one while travel time plus visit duration still finishes on or before `day_end`.
 - Drop any place that no longer fits with reason `insufficient_time`.
 - If MCP route estimation fails, use `AGENT3_FALLBACK_TRAVEL_MINUTES` for that leg and note the fallback in the response.
@@ -174,7 +178,9 @@ curl -X POST http://127.0.0.1:8080/v1/plan \
         "lat": 41.8902,
         "lng": 12.4922,
         "estimated_duration_minutes": 90,
-        "priority": 5
+        "priority": 5,
+        "opens_at": "09:00:00",
+        "closes_at": "18:00:00"
       },
       {
         "id": "pantheon",
@@ -182,7 +188,9 @@ curl -X POST http://127.0.0.1:8080/v1/plan \
         "lat": 41.8986,
         "lng": 12.4769,
         "estimated_duration_minutes": 45,
-        "priority": 4
+        "priority": 4,
+        "opens_at": "10:30:00",
+        "closes_at": "18:00:00"
       }
     ]
   }'
@@ -214,6 +222,7 @@ Travel-aware response shape:
     "deterministic_greedy_planner",
     "travel_time_source=mcp",
     "feasibility=true_when_at_least_one_stop_is_scheduled",
+    "selected_transport_mode=walk",
     "transport_preferences=walk"
   ],
   "feasibility": true,
@@ -249,7 +258,9 @@ curl -X POST http://127.0.0.1:8080/a2a \
           "lat": 41.8902,
           "lng": 12.4922,
           "estimated_duration_minutes": 90,
-          "priority": 5
+          "priority": 5,
+          "opens_at": "09:00:00",
+          "closes_at": "18:00:00"
         }
       ]
     }
@@ -311,11 +322,11 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 
 - Real A2A protocol features can replace the current HTTP/JSON adapter without a
   full rewrite of the planning API.
-- Opening hours are not modeled yet.
+- Opening hours are supported only as simple same-day place windows with no waiting logic.
 - Meal insertion is not modeled yet.
 - Advanced transport-mode optimization is not modeled yet.
 - Global route optimization is not modeled yet.
 - Multi-modal plans are not modeled yet.
-- Richer constraints should be added next, such as opening hours and hard stop ordering rules.
+- Richer constraints should be added next, such as hard stop ordering rules and waiting behavior.
 - Future tool calls should flow into `agent-3-mcp` instead of being embedded
   directly into the agent boundary.
