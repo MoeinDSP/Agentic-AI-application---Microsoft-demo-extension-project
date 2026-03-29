@@ -61,7 +61,10 @@ class AgentCardService:
                     "This agent card describes an A2A-ready HTTP boundary, "
                     "not a full A2A spec implementation."
                 ),
-                "Planner behavior uses a deterministic greedy scheduler with zero travel time.",
+                (
+                    "Planner behavior uses a deterministic greedy scheduler with "
+                    "MCP-backed travel estimates and deterministic fallback."
+                ),
             ],
         )
 
