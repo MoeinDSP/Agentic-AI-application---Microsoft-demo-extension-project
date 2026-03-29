@@ -26,6 +26,18 @@ class PlaceInput(Coordinates):
     name: str = Field(min_length=1)
     estimated_duration_minutes: int = Field(gt=0)
     priority: int = Field(ge=1, le=5)
+    opens_at: time | None = None
+    closes_at: time | None = None
+
+    @model_validator(mode="after")
+    def validate_opening_window(self) -> "PlaceInput":
+        if (
+            self.opens_at is not None
+            and self.closes_at is not None
+            and self.closes_at <= self.opens_at
+        ):
+            raise ValueError("closes_at must be later than opens_at")
+        return self
 
 
 class PlanRequest(BaseModel):
