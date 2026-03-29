@@ -123,6 +123,10 @@ The current planner uses a deterministic greedy algorithm:
 - Drop a place with `closed_at_arrival` when arrival happens before opening or at/after closing.
 - Drop a place with `closes_before_visit_ends` when the visit would run past closing.
 - Do not wait for a place to open. The planner either schedules it immediately or drops it.
+- If `lunch_required` is `true`, attempt to insert exactly one synthetic lunch stop.
+- Lunch is inserted at the earliest feasible point inside the configured lunch window.
+- Lunch uses `lunch_time_window_start`, `lunch_time_window_end`, and `lunch_duration_minutes`.
+- If lunch cannot fit, the planner keeps the place plan and adds `lunch_not_inserted` to `notes`.
 - Add places one by one while travel time plus visit duration still finishes on or before `day_end`.
 - Drop any place that no longer fits with reason `insufficient_time`.
 - If MCP route estimation fails, use `AGENT3_FALLBACK_TRAVEL_MINUTES` for that leg and note the fallback in the response.
@@ -130,6 +134,7 @@ The current planner uses a deterministic greedy algorithm:
 Response semantics:
 
 - `ordered_stops` includes scheduled places with `arrival_time`, `start_time`, `end_time`, and `travel_minutes_from_previous`.
+- Lunch appears in `ordered_stops` as a synthetic stop with `stop_type` set to `lunch`.
 - `dropped_places` includes unscheduled places and a drop reason.
 - `feasibility` is `true` when at least one stop was scheduled.
 - `feasibility` is `false` when the planner cannot schedule any stop in the day window.
@@ -152,6 +157,7 @@ Current limitations:
 - The planner is deterministic but still intentionally simple.
 - Travel time is route-aware, but the planner is still greedy and not globally optimized.
 - Only one effective transport mode is used for the whole plan.
+- Lunch is synthetic only and does not include restaurant selection.
 
 ## Example Requests
 
@@ -169,15 +175,19 @@ curl -X POST http://127.0.0.1:8080/v1/plan \
   -d '{
     "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
     "day_start": "09:00:00",
-    "day_end": "11:00:00",
+    "day_end": "15:00:00",
     "transport_preferences": ["walk"],
+    "lunch_required": true,
+    "lunch_time_window_start": "12:00:00",
+    "lunch_time_window_end": "14:00:00",
+    "lunch_duration_minutes": 30,
     "places": [
       {
         "id": "colosseum",
         "name": "Colosseum",
         "lat": 41.8902,
         "lng": 12.4922,
-        "estimated_duration_minutes": 90,
+        "estimated_duration_minutes": 180,
         "priority": 5,
         "opens_at": "09:00:00",
         "closes_at": "18:00:00"
@@ -202,14 +212,26 @@ Travel-aware response shape:
 {
   "ordered_stops": [
     {
+      "stop_type": "place",
       "place_id": "colosseum",
       "place_name": "Colosseum",
       "sequence": 1,
       "arrival_time": "09:10:00",
       "start_time": "09:10:00",
-      "end_time": "10:40:00",
+      "end_time": "12:10:00",
       "travel_minutes_from_previous": 10,
-      "estimated_duration_minutes": 90
+      "estimated_duration_minutes": 180
+    },
+    {
+      "stop_type": "lunch",
+      "place_id": "lunch",
+      "place_name": "Lunch",
+      "sequence": 2,
+      "arrival_time": "12:10:00",
+      "start_time": "12:10:00",
+      "end_time": "12:40:00",
+      "travel_minutes_from_previous": 0,
+      "estimated_duration_minutes": 30
     }
   ],
   "dropped_places": [
@@ -223,12 +245,13 @@ Travel-aware response shape:
     "travel_time_source=mcp",
     "feasibility=true_when_at_least_one_stop_is_scheduled",
     "selected_transport_mode=walk",
-    "transport_preferences=walk"
+    "transport_preferences=walk",
+    "lunch_inserted"
   ],
   "feasibility": true,
   "selected_transport_mode": "walk",
   "total_travel_minutes": 10,
-  "total_visit_minutes": 90
+  "total_visit_minutes": 210
 }
 ```
 
@@ -249,15 +272,19 @@ curl -X POST http://127.0.0.1:8080/a2a \
     "input": {
       "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
       "day_start": "09:00:00",
-      "day_end": "11:00:00",
+      "day_end": "15:00:00",
       "transport_preferences": ["walk"],
+      "lunch_required": true,
+      "lunch_time_window_start": "12:00:00",
+      "lunch_time_window_end": "14:00:00",
+      "lunch_duration_minutes": 30,
       "places": [
         {
           "id": "colosseum",
           "name": "Colosseum",
           "lat": 41.8902,
           "lng": 12.4922,
-          "estimated_duration_minutes": 90,
+          "estimated_duration_minutes": 180,
           "priority": 5,
           "opens_at": "09:00:00",
           "closes_at": "18:00:00"
@@ -323,10 +350,13 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 - Real A2A protocol features can replace the current HTTP/JSON adapter without a
   full rewrite of the planning API.
 - Opening hours are supported only as simple same-day place windows with no waiting logic.
-- Meal insertion is not modeled yet.
+- Lunch is supported only as one synthetic stop inside a configured time window.
+- There is no restaurant recommendation or external lunch search yet.
+- Dinner is not modeled yet.
 - Advanced transport-mode optimization is not modeled yet.
 - Global route optimization is not modeled yet.
 - Multi-modal plans are not modeled yet.
+- Global lunch placement optimization is not modeled yet.
 - Richer constraints should be added next, such as hard stop ordering rules and waiting behavior.
 - Future tool calls should flow into `agent-3-mcp` instead of being embedded
   directly into the agent boundary.
