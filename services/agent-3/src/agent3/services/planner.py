@@ -14,12 +14,14 @@ from agent3.models.plan import (
     LUNCH_NOT_INSERTED_NOTE,
     NO_RESTAURANT_CANDIDATE_FOUND_NOTE,
     STOP_TYPE_LUNCH,
+    STOP_TYPE_MEAL,
     Coordinates,
     DroppedPlace,
     PlaceInput,
     PlannedStop,
     PlanRequest,
     PlanResponse,
+    RestaurantSummary,
 )
 from agent3.services.agent4_client import MealRecommendationError, get_agent4_meal_client
 from agent3.services.mcp_client import (
@@ -121,6 +123,7 @@ class PlannerService:
                 lunch_stop, unavailable, no_candidates = self._maybe_enrich_lunch_stop(
                     lunch_stop=lunch_stop,
                     current_origin=current_origin,
+                    request=request,
                 )
                 ordered_stops.append(lunch_stop)
                 lunch_inserted = True
@@ -193,6 +196,7 @@ class PlannerService:
             lunch_stop, unavailable, no_candidates = self._maybe_enrich_lunch_stop(
                 lunch_stop=lunch_stop,
                 current_origin=current_origin,
+                request=request,
             )
             ordered_stops.append(lunch_stop)
             lunch_inserted = True
@@ -271,20 +275,21 @@ class PlannerService:
         *,
         lunch_stop: PlannedStop,
         current_origin: Coordinates,
+        request: PlanRequest,
     ) -> tuple[PlannedStop, bool, bool]:
         if self._meal_client is None:
             return lunch_stop, False, False
 
-        request = MealRecommendationRequest(
+        meal_request = MealRecommendationRequest(
             time_of_day="lunch",
             search_center=current_origin,
             search_radius_meters=1000,
-            budget_per_meal_per_person=None,
-            preferences=[],
+            budget_per_meal_per_person=request.budget_per_meal_per_person,
+            preferences=request.meal_preferences,
         )
 
         try:
-            response = self._meal_client.recommend_meal(request)
+            response = self._meal_client.recommend_meal(meal_request)
         except MealRecommendationError:
             return lunch_stop, True, False
 
@@ -305,8 +310,10 @@ class PlannerService:
     ) -> PlannedStop:
         return lunch_stop.model_copy(
             update={
+                "stop_type": STOP_TYPE_MEAL,
                 "place_id": candidate.id,
                 "place_name": candidate.name,
+                "restaurant": RestaurantSummary.model_validate(candidate.model_dump()),
             }
         )
 

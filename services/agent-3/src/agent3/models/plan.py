@@ -56,6 +56,8 @@ class PlanRequest(BaseModel):
     day_end: time
     transport_preferences: list[str] = Field(default_factory=list)
     places: list[PlaceInput] = Field(min_length=1)
+    meal_preferences: list[str] = Field(default_factory=list)
+    budget_per_meal_per_person: float | None = Field(default=None, ge=0)
     lunch_required: bool = False
     lunch_time_window_start: time = time(hour=12, minute=0)
     lunch_time_window_end: time = time(hour=14, minute=0)
@@ -75,6 +77,11 @@ class PlanRequest(BaseModel):
             )
         return list(dict.fromkeys(normalized))
 
+    @field_validator("meal_preferences")
+    @classmethod
+    def normalize_meal_preferences(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(item.strip().lower() for item in value if item.strip()))
+
     @model_validator(mode="after")
     def validate_day_window(self) -> "PlanRequest":
         if self.day_end <= self.day_start:
@@ -86,8 +93,18 @@ class PlanRequest(BaseModel):
         return self
 
 
+class RestaurantSummary(BaseModel):
+    id: str
+    name: str
+    location: Coordinates
+    price_level: int = Field(ge=1, le=4)
+    cuisines: list[str]
+    rating: float = Field(ge=0, le=5)
+    summary: str
+
+
 class PlannedStop(BaseModel):
-    stop_type: Literal["place", "lunch"] = STOP_TYPE_PLACE
+    stop_type: Literal["place", "lunch", "meal"] = STOP_TYPE_PLACE
     place_id: str
     place_name: str
     sequence: int
@@ -96,6 +113,7 @@ class PlannedStop(BaseModel):
     end_time: time
     travel_minutes_from_previous: int = Field(ge=0)
     estimated_duration_minutes: int
+    restaurant: RestaurantSummary | None = None
 
 
 class DroppedPlace(BaseModel):
