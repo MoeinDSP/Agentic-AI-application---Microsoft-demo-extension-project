@@ -62,7 +62,7 @@ class PlannerService:
         self._route_client = route_client or FixedTravelRouteClient(0)
         self._fallback_travel_minutes = fallback_travel_minutes
 
-    def plan_day(self, request: PlanRequest) -> PlanResponse:
+    def build_plan(self, request: PlanRequest) -> PlanResponse:
         selected_transport_mode = self._resolve_transport_mode(request.transport_preferences)
         available_minutes = self._time_to_minutes(request.day_end) - self._time_to_minutes(
             request.day_start
@@ -197,8 +197,8 @@ class PlannerService:
             total_visit_minutes=total_visit_minutes,
         )
 
-    def build_plan(self, request: PlanRequest) -> PlanResponse:
-        return self.plan_day(request)
+    def plan_day(self, request: PlanRequest) -> PlanResponse:
+        return self.build_plan(request)
 
     def _estimate_travel(
         self,
