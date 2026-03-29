@@ -36,6 +36,12 @@ uv sync --group dev
 uv run python -m uvicorn agent4.main:app --factory --reload --host 127.0.0.1 --port 8070
 ```
 
+Local development order when used with Agent 3:
+
+1. start `agent-3-mcp`
+2. start `agent-4`
+3. start `agent-3`
+
 ## Test
 
 ```bash
@@ -74,6 +80,13 @@ Current mock response fields:
 
 - `candidates`
 
+Deterministic ranking inputs:
+
+- budget fit
+- cuisine or preference keyword match
+- rating as tie-breaker
+- distance within `search_radius_meters`
+
 ## Docker
 
 ```bash
@@ -86,3 +99,4 @@ docker run --rm -p 8070:8070 -e PORT=8070 agent-4:local
 - This service is deterministic and mocked.
 - No external restaurant APIs are used yet.
 - Lunch is the primary supported meal type for now.
+- Agent 3 remains the scheduler. Agent 4 only returns ranked meal candidates.
