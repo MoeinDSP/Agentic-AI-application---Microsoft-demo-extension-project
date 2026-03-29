@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from agent3.main import app
@@ -450,6 +451,7 @@ def test_v1_plan_and_a2a_insert_same_restaurant_backed_lunch_stop() -> None:
         == "trattoria-della-luce"
     )
     assert "lunch_inserted" in plan_response.json()["notes"]
+    assert "agent4_invocation_mode=http" in plan_response.json()["notes"]
     assert plan_response.json() == a2a_response.json()["output"]
 
 
@@ -499,4 +501,45 @@ def test_v1_plan_and_a2a_fall_back_to_synthetic_lunch_when_agent4_fails() -> Non
         "agent4_unavailable_using_synthetic_lunch"
         in plan_response.json()["notes"]
     )
+    assert plan_response.json() == a2a_response.json()["output"]
+
+
+def test_v1_plan_and_a2a_support_a2a_agent4_mode() -> None:
+    planner = PlannerService(
+        route_client=FixedRouteClient(0),
+        meal_client=FixedMealClient(),
+    )
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["day_end"] = "15:00:00"
+    payload["lunch_required"] = True
+    payload["lunch_time_window_start"] = "12:00:00"
+    payload["lunch_time_window_end"] = "14:00:00"
+    payload["lunch_duration_minutes"] = 30
+    payload["meal_preferences"] = ["italian"]
+    payload["budget_per_meal_per_person"] = 20
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "agent3.services.planner.get_settings",
+            lambda: type("SettingsStub", (), {"agent4_invocation_mode": "a2a"})(),
+        )
+        try:
+            plan_response = client.post("/v1/plan", json=payload)
+            a2a_response = client.post(
+                "/a2a",
+                json={
+                    "request_id": "req-lunch-a2a-mode",
+                    "action": "plan_day",
+                    "input": payload,
+                },
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert "agent4_invocation_mode=a2a" in plan_response.json()["notes"]
     assert plan_response.json() == a2a_response.json()["output"]

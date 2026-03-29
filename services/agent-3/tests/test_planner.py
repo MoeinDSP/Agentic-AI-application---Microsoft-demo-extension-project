@@ -502,6 +502,7 @@ def test_planner_enriches_lunch_with_restaurant_backed_meal_stop() -> None:
     assert response.ordered_stops[1].restaurant is not None
     assert response.ordered_stops[1].restaurant.id == "trattoria-della-luce"
     assert LUNCH_INSERTED_NOTE in response.notes
+    assert "agent4_invocation_mode=http" in response.notes
 
 
 def test_planner_uses_synthetic_lunch_when_agent4_fails() -> None:
