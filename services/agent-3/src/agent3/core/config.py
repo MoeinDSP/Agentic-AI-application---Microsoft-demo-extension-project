@@ -1,7 +1,12 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from agent3.models.agent4 import (
+    AGENT4_INVOCATION_MODE_HTTP,
+    SUPPORTED_AGENT4_INVOCATION_MODES,
+)
 
 
 class Settings(BaseSettings):
@@ -17,9 +22,21 @@ class Settings(BaseSettings):
     mcp_timeout_seconds: float = Field(default=2.0)
     agent4_base_url: str = Field(default="http://127.0.0.1:8070")
     agent4_timeout_seconds: float = Field(default=2.0)
+    agent4_invocation_mode: str = Field(default=AGENT4_INVOCATION_MODE_HTTP)
     fallback_travel_minutes: int = Field(default=0, ge=0)
     default_transport_mode: str = Field(default="walk")
     log_level: str = Field(default="INFO")
+
+    @field_validator("agent4_invocation_mode")
+    @classmethod
+    def validate_agent4_invocation_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_AGENT4_INVOCATION_MODES:
+            supported_modes = ", ".join(sorted(SUPPORTED_AGENT4_INVOCATION_MODES))
+            raise ValueError(
+                f"agent4_invocation_mode must be one of: {supported_modes}"
+            )
+        return normalized
 
     model_config = SettingsConfigDict(
         env_prefix="AGENT3_",
