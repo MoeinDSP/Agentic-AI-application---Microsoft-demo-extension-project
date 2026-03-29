@@ -93,6 +93,9 @@ Copy `.env.example` to `.env` if needed.
 - `AGENT3_PUBLIC_BASE_URL`: public base URL used in the Agent Card.
 - `AGENT3_AGENT_CARD_PATH`: Agent Card path.
 - `AGENT3_A2A_PATH`: A2A request path.
+- `AGENT3_MCP_BASE_URL`: base URL for the independent `agent-3-mcp` tool service.
+- `AGENT3_MCP_TIMEOUT_SECONDS`: short timeout for route-estimate HTTP calls.
+- `AGENT3_FALLBACK_TRAVEL_MINUTES`: deterministic per-leg fallback when MCP route estimation fails.
 - `AGENT3_LOG_LEVEL`: logging level.
 
 ## Architecture Notes
@@ -109,16 +112,21 @@ The current planner uses a deterministic greedy algorithm:
 - Sort places by `priority` descending.
 - Preserve input order when priorities tie.
 - Start scheduling at `day_start`.
-- Assume zero travel time between stops.
-- Add places one by one while each stop still ends on or before `day_end`.
+- Request travel time over HTTP from `agent-3-mcp` for:
+  - start location -> first stop
+  - previous accepted stop -> next candidate stop
+- Add places one by one while travel time plus visit duration still finishes on or before `day_end`.
 - Drop any place that no longer fits with reason `insufficient_time`.
+- If MCP route estimation fails, use `AGENT3_FALLBACK_TRAVEL_MINUTES` for that leg and note the fallback in the response.
 
 Response semantics:
 
-- `ordered_stops` includes scheduled places with `start_time` and `end_time`.
+- `ordered_stops` includes scheduled places with `arrival_time`, `start_time`, `end_time`, and `travel_minutes_from_previous`.
 - `dropped_places` includes unscheduled places and a drop reason.
 - `feasibility` is `true` when at least one stop was scheduled.
 - `feasibility` is `false` when the planner cannot schedule any stop in the day window.
+- `total_travel_minutes` is the sum of accepted travel legs.
+- `total_visit_minutes` is the sum of accepted visit durations.
 
 ## A2A Support
 
@@ -133,7 +141,7 @@ Current limitations:
 - This is not a full A2A protocol implementation.
 - Authentication is still a local-first placeholder.
 - The planner is deterministic but still intentionally simple.
-- Travel time and route estimation are not integrated yet.
+- Travel time is route-aware, but the planner is still greedy and not globally optimized.
 
 ## Example Requests
 
@@ -172,6 +180,40 @@ curl -X POST http://127.0.0.1:8080/v1/plan \
       }
     ]
   }'
+```
+
+Travel-aware response shape:
+
+```json
+{
+  "ordered_stops": [
+    {
+      "place_id": "colosseum",
+      "place_name": "Colosseum",
+      "sequence": 1,
+      "arrival_time": "09:10:00",
+      "start_time": "09:10:00",
+      "end_time": "10:40:00",
+      "travel_minutes_from_previous": 10,
+      "estimated_duration_minutes": 90
+    }
+  ],
+  "dropped_places": [
+    {
+      "place_id": "pantheon",
+      "reason": "insufficient_time"
+    }
+  ],
+  "notes": [
+    "deterministic_greedy_planner",
+    "travel_time_source=mcp",
+    "feasibility=true_when_at_least_one_stop_is_scheduled",
+    "transport_preferences=walk"
+  ],
+  "feasibility": true,
+  "total_travel_minutes": 10,
+  "total_visit_minutes": 90
+}
 ```
 
 Agent Card:
@@ -225,6 +267,25 @@ Standard targets:
 - `test`
 - `lint`
 
+Local startup order:
+
+1. Start `agent-3-mcp`
+2. Start `agent-3`
+
+Example local commands:
+
+```bash
+cd services/agent-3-mcp
+uv sync --group dev
+uv run python -m uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1 --port 8090
+```
+
+```bash
+cd services/agent-3
+uv sync --group dev
+uv run python -m uvicorn agent3.main:app --factory --reload --host 127.0.0.1 --port 8080
+```
+
 ## Docker Usage
 
 Build the image from the service directory:
@@ -243,11 +304,10 @@ docker run --rm -p 8080:8080 -e PORT=8080 agent-3:local
 
 - Real A2A protocol features can replace the current HTTP/JSON adapter without a
   full rewrite of the planning API.
-- Route estimation should be added next so travel time is no longer assumed to
-  be zero.
-- Richer constraints should be added next, such as opening hours and hard stop
-  ordering rules.
-- MCP integration should be added later through `agent-3-mcp`, not embedded
-  into the planner boundary.
+- Opening hours are not modeled yet.
+- Meal insertion is not modeled yet.
+- Advanced transport-mode optimization is not modeled yet.
+- Global route optimization is not modeled yet.
+- Richer constraints should be added next, such as opening hours and hard stop ordering rules.
 - Future tool calls should flow into `agent-3-mcp` instead of being embedded
   directly into the agent boundary.
