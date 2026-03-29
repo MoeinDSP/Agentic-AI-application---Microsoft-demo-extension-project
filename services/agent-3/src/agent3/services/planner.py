@@ -5,6 +5,7 @@ from typing import Protocol
 from agent3.core.config import get_settings
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
+    DROP_REASON_INSUFFICIENT_TIME,
     Coordinates,
     DroppedPlace,
     PlaceInput,
@@ -12,7 +13,10 @@ from agent3.models.plan import (
     PlanRequest,
     PlanResponse,
 )
-from agent3.services.mcp_client import RouteEstimationError, get_mcp_route_client
+from agent3.services.mcp_client import (
+    RouteEstimationError,
+    get_mcp_route_client,
+)
 
 
 class RouteEstimator(Protocol):
@@ -107,7 +111,7 @@ class PlannerService:
             dropped_places.append(
                 DroppedPlace(
                     place_id=place.id,
-                    reason="insufficient_time",
+                    reason=DROP_REASON_INSUFFICIENT_TIME,
                 )
             )
 

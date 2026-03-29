@@ -3,6 +3,9 @@ from datetime import time
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 SUPPORTED_TRANSPORT_MODES = {"walk", "drive", "transit"}
+DROP_REASON_INSUFFICIENT_TIME = "insufficient_time"
+DROP_REASON_CLOSED_AT_ARRIVAL = "closed_at_arrival"
+DROP_REASON_CLOSES_BEFORE_VISIT_ENDS = "closes_before_visit_ends"
 
 
 class HealthResponse(BaseModel):
