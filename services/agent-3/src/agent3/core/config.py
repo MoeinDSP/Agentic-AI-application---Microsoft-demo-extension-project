@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     a2a_path: str = Field(default="/a2a")
     mcp_base_url: str = Field(default="http://127.0.0.1:8090")
     mcp_timeout_seconds: float = Field(default=2.0)
+    agent4_base_url: str = Field(default="http://127.0.0.1:8070")
+    agent4_timeout_seconds: float = Field(default=2.0)
     fallback_travel_minutes: int = Field(default=0, ge=0)
     default_transport_mode: str = Field(default="walk")
     log_level: str = Field(default="INFO")
