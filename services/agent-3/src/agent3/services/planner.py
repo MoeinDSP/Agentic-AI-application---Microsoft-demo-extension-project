@@ -54,6 +54,7 @@ class PlannerService:
         self._fallback_travel_minutes = fallback_travel_minutes
 
     def plan_day(self, request: PlanRequest) -> PlanResponse:
+        selected_transport_mode = self._resolve_transport_mode(request.transport_preferences)
         available_minutes = self._time_to_minutes(request.day_end) - self._time_to_minutes(
             request.day_start
         )
@@ -74,7 +75,7 @@ class PlannerService:
             travel_estimate = self._estimate_travel(
                 origin=current_origin,
                 destination=place,
-                transport_preferences=request.transport_preferences,
+                transport_preferences=[selected_transport_mode],
             )
             if travel_estimate.source == "fallback":
                 used_fallback = True
@@ -114,6 +115,7 @@ class PlannerService:
             "deterministic_greedy_planner",
             "travel_time_source=mcp" if not used_fallback else "travel_time_source=fallback",
             "feasibility=true_when_at_least_one_stop_is_scheduled",
+            f"selected_transport_mode={selected_transport_mode}",
             f"transport_preferences={','.join(request.transport_preferences) or 'none'}",
         ]
         if used_fallback:
@@ -126,6 +128,7 @@ class PlannerService:
             dropped_places=dropped_places,
             notes=notes,
             feasibility=bool(ordered_stops),
+            selected_transport_mode=selected_transport_mode,
             total_travel_minutes=total_travel_minutes,
             total_visit_minutes=total_visit_minutes,
         )
@@ -160,6 +163,11 @@ class PlannerService:
     def _minutes_to_time(self, total_minutes: int) -> time:
         hours, minutes = divmod(total_minutes, 60)
         return time(hour=hours, minute=minutes)
+
+    def _resolve_transport_mode(self, transport_preferences: list[str]) -> str:
+        if transport_preferences:
+            return transport_preferences[0]
+        return get_settings().default_transport_mode
 
 
 @lru_cache(maxsize=1)

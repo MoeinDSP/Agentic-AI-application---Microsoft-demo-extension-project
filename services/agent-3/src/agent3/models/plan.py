@@ -74,5 +74,6 @@ class PlanResponse(BaseModel):
     dropped_places: list[DroppedPlace]
     notes: list[str]
     feasibility: bool
+    selected_transport_mode: str
     total_travel_minutes: int = Field(ge=0)
     total_visit_minutes: int = Field(ge=0)
