@@ -3,13 +3,16 @@ from functools import lru_cache
 from typing import Protocol
 
 from agent3.core.config import get_settings
+from agent3.models.agent4 import MealRecommendationRequest, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
+    AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE,
     DROP_REASON_CLOSED_AT_ARRIVAL,
     DROP_REASON_CLOSES_BEFORE_VISIT_ENDS,
     DROP_REASON_INSUFFICIENT_TIME,
     LUNCH_INSERTED_NOTE,
     LUNCH_NOT_INSERTED_NOTE,
+    NO_RESTAURANT_CANDIDATE_FOUND_NOTE,
     STOP_TYPE_LUNCH,
     Coordinates,
     DroppedPlace,
@@ -18,6 +21,7 @@ from agent3.models.plan import (
     PlanRequest,
     PlanResponse,
 )
+from agent3.services.agent4_client import MealRecommendationError, get_agent4_meal_client
 from agent3.services.mcp_client import (
     RouteEstimationError,
     get_mcp_route_client,
@@ -32,6 +36,13 @@ class RouteEstimator(Protocol):
         destination: Coordinates,
         transport_preferences: list[str],
     ) -> TravelEstimate: ...
+
+
+class MealRecommender(Protocol):
+    def recommend_meal(
+        self,
+        request: MealRecommendationRequest,
+    ) -> object: ...
 
 
 class FixedTravelRouteClient:
@@ -57,9 +68,11 @@ class PlannerService:
     def __init__(
         self,
         route_client: RouteEstimator | None = None,
+        meal_client: MealRecommender | None = None,
         fallback_travel_minutes: int = 0,
     ) -> None:
         self._route_client = route_client or FixedTravelRouteClient(0)
+        self._meal_client = meal_client
         self._fallback_travel_minutes = fallback_travel_minutes
 
     def build_plan(self, request: PlanRequest) -> PlanResponse:
@@ -80,6 +93,8 @@ class PlannerService:
         current_origin = request.start_location
         used_fallback = False
         lunch_inserted = False
+        agent4_unavailable = False
+        no_restaurant_candidate_found = False
 
         for place in prioritized_places:
             travel_estimate = self._estimate_travel(
@@ -103,8 +118,16 @@ class PlannerService:
                 lunch_inserted=lunch_inserted,
             )
             if lunch_stop is not None:
+                lunch_stop, unavailable, no_candidates = self._maybe_enrich_lunch_stop(
+                    lunch_stop=lunch_stop,
+                    current_origin=current_origin,
+                )
                 ordered_stops.append(lunch_stop)
                 lunch_inserted = True
+                agent4_unavailable = agent4_unavailable or unavailable
+                no_restaurant_candidate_found = (
+                    no_restaurant_candidate_found or no_candidates
+                )
                 consumed_minutes = (
                     self._time_to_minutes(lunch_stop.end_time)
                     - self._time_to_minutes(request.day_start)
@@ -167,8 +190,14 @@ class PlannerService:
             lunch_inserted=lunch_inserted,
         )
         if lunch_stop is not None:
+            lunch_stop, unavailable, no_candidates = self._maybe_enrich_lunch_stop(
+                lunch_stop=lunch_stop,
+                current_origin=current_origin,
+            )
             ordered_stops.append(lunch_stop)
             lunch_inserted = True
+            agent4_unavailable = agent4_unavailable or unavailable
+            no_restaurant_candidate_found = no_restaurant_candidate_found or no_candidates
             total_visit_minutes += request.lunch_duration_minutes
 
         notes = [
@@ -182,6 +211,10 @@ class PlannerService:
             notes.append(
                 LUNCH_INSERTED_NOTE if lunch_inserted else LUNCH_NOT_INSERTED_NOTE
             )
+        if agent4_unavailable:
+            notes.append(AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE)
+        if no_restaurant_candidate_found:
+            notes.append(NO_RESTAURANT_CANDIDATE_FOUND_NOTE)
         if used_fallback:
             notes.append(
                 f"fallback_travel_minutes={self._fallback_travel_minutes}"
@@ -232,6 +265,50 @@ class PlannerService:
         if transport_preferences:
             return transport_preferences[0]
         return get_settings().default_transport_mode
+
+    def _maybe_enrich_lunch_stop(
+        self,
+        *,
+        lunch_stop: PlannedStop,
+        current_origin: Coordinates,
+    ) -> tuple[PlannedStop, bool, bool]:
+        if self._meal_client is None:
+            return lunch_stop, False, False
+
+        request = MealRecommendationRequest(
+            time_of_day="lunch",
+            search_center=current_origin,
+            search_radius_meters=1000,
+            budget_per_meal_per_person=None,
+            preferences=[],
+        )
+
+        try:
+            response = self._meal_client.recommend_meal(request)
+        except MealRecommendationError:
+            return lunch_stop, True, False
+
+        candidates = getattr(response, "candidates", [])
+        if not candidates:
+            return lunch_stop, False, True
+
+        return self._apply_restaurant_to_lunch_stop(
+            lunch_stop=lunch_stop,
+            candidate=candidates[0],
+        ), False, False
+
+    def _apply_restaurant_to_lunch_stop(
+        self,
+        *,
+        lunch_stop: PlannedStop,
+        candidate: RestaurantCandidate,
+    ) -> PlannedStop:
+        return lunch_stop.model_copy(
+            update={
+                "place_id": candidate.id,
+                "place_name": candidate.name,
+            }
+        )
 
     def _build_lunch_stop_before_place(
         self,
@@ -342,5 +419,6 @@ def get_planner_service() -> PlannerService:
     settings = get_settings()
     return PlannerService(
         route_client=get_mcp_route_client(),
+        meal_client=get_agent4_meal_client(),
         fallback_travel_minutes=settings.fallback_travel_minutes,
     )
