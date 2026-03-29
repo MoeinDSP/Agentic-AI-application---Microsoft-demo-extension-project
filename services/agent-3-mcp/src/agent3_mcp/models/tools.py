@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -15,10 +15,13 @@ class RouteEstimateRequest(BaseModel):
     destination: Coordinates
     mode: str = Field(min_length=1)
 
-    @model_validator(mode="after")
-    def normalize_mode(self) -> "RouteEstimateRequest":
-        self.mode = self.mode.strip().lower()
-        return self
+    @field_validator("mode")
+    @classmethod
+    def normalize_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"walk", "drive", "transit"}:
+            raise ValueError("mode must be one of: walk, drive, transit")
+        return normalized
 
 
 class RouteEstimateResponse(BaseModel):

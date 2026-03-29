@@ -14,13 +14,29 @@ class ToolService:
         lat_gap = abs(request.origin.lat - request.destination.lat)
         lng_gap = abs(request.origin.lng - request.destination.lng)
         estimated_distance_km = round((lat_gap + lng_gap) * 55, 2)
-        estimated_duration_minutes = max(10, int(estimated_distance_km * 3))
+        mode_multiplier = {
+            "walk": 3.0,
+            "drive": 1.2,
+            "transit": 1.8,
+        }[request.mode]
+        minimum_duration = {
+            "walk": 10,
+            "drive": 5,
+            "transit": 8,
+        }[request.mode]
+        estimated_duration_minutes = max(
+            minimum_duration,
+            int(estimated_distance_km * mode_multiplier),
+        )
 
         return RouteEstimateResponse(
             mode=request.mode,
             estimated_distance_km=estimated_distance_km,
             estimated_duration_minutes=estimated_duration_minutes,
-            notes=["placeholder_route_estimate"],
+            notes=[
+                "placeholder_route_estimate",
+                f"transport_mode={request.mode}",
+            ],
         )
 
     def get_place_details(self, request: PlaceDetailsRequest) -> PlaceDetailsResponse:
