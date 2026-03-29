@@ -2,6 +2,7 @@ from datetime import time
 from functools import lru_cache
 from typing import Protocol
 
+from agent3.core.config import get_settings
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
     Coordinates,
@@ -44,8 +45,13 @@ class FixedTravelRouteClient:
 
 
 class PlannerService:
-    def __init__(self, route_client: RouteEstimator | None = None) -> None:
+    def __init__(
+        self,
+        route_client: RouteEstimator | None = None,
+        fallback_travel_minutes: int = 0,
+    ) -> None:
         self._route_client = route_client or FixedTravelRouteClient(0)
+        self._fallback_travel_minutes = fallback_travel_minutes
 
     def plan_day(self, request: PlanRequest) -> PlanResponse:
         available_minutes = self._time_to_minutes(request.day_end) - self._time_to_minutes(
@@ -62,6 +68,7 @@ class PlannerService:
         total_travel_minutes = 0
         total_visit_minutes = 0
         current_origin = request.start_location
+        used_fallback = False
 
         for place in prioritized_places:
             travel_estimate = self._estimate_travel(
@@ -69,6 +76,8 @@ class PlannerService:
                 destination=place,
                 transport_preferences=request.transport_preferences,
             )
+            if travel_estimate.source == "fallback":
+                used_fallback = True
             arrival_offset_minutes = consumed_minutes + travel_estimate.estimated_duration_minutes
             place_end_minutes = arrival_offset_minutes + place.estimated_duration_minutes
             if place_end_minutes <= available_minutes:
@@ -103,10 +112,14 @@ class PlannerService:
 
         notes = [
             "deterministic_greedy_planner",
-            "travel_time_source=mcp_or_current_fallback",
+            "travel_time_source=mcp" if not used_fallback else "travel_time_source=fallback",
             "feasibility=true_when_at_least_one_stop_is_scheduled",
             f"transport_preferences={','.join(request.transport_preferences) or 'none'}",
         ]
+        if used_fallback:
+            notes.append(
+                f"fallback_travel_minutes={self._fallback_travel_minutes}"
+            )
 
         return PlanResponse(
             ordered_stops=ordered_stops,
@@ -137,8 +150,8 @@ class PlannerService:
             return TravelEstimate(
                 source="fallback",
                 mode=transport_preferences[0] if transport_preferences else "walk",
-                estimated_duration_minutes=0,
-                notes=["fallback_travel_minutes=0"],
+                estimated_duration_minutes=self._fallback_travel_minutes,
+                notes=[f"fallback_travel_minutes={self._fallback_travel_minutes}"],
             )
 
     def _time_to_minutes(self, value: time) -> int:
@@ -151,4 +164,8 @@ class PlannerService:
 
 @lru_cache(maxsize=1)
 def get_planner_service() -> PlannerService:
-    return PlannerService(get_mcp_route_client())
+    settings = get_settings()
+    return PlannerService(
+        route_client=get_mcp_route_client(),
+        fallback_travel_minutes=settings.fallback_travel_minutes,
+    )
