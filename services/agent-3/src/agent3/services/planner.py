@@ -5,6 +5,8 @@ from typing import Protocol
 from agent3.core.config import get_settings
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
+    DROP_REASON_CLOSED_AT_ARRIVAL,
+    DROP_REASON_CLOSES_BEFORE_VISIT_ENDS,
     DROP_REASON_INSUFFICIENT_TIME,
     Coordinates,
     DroppedPlace,
@@ -85,19 +87,36 @@ class PlannerService:
                 used_fallback = True
             arrival_offset_minutes = consumed_minutes + travel_estimate.estimated_duration_minutes
             place_end_minutes = arrival_offset_minutes + place.estimated_duration_minutes
-            if place_end_minutes <= available_minutes:
-                stop_arrival_minutes = (
-                    self._time_to_minutes(request.day_start) + arrival_offset_minutes
+            stop_arrival_minutes = (
+                self._time_to_minutes(request.day_start) + arrival_offset_minutes
+            )
+            stop_end_minutes = self._time_to_minutes(request.day_start) + place_end_minutes
+            arrival_time = self._minutes_to_time(stop_arrival_minutes)
+            end_time = self._minutes_to_time(stop_end_minutes)
+
+            opening_hours_drop_reason = self._get_opening_hours_drop_reason(
+                place=place,
+                arrival_time=arrival_time,
+                end_time=end_time,
+            )
+            if opening_hours_drop_reason is not None:
+                dropped_places.append(
+                    DroppedPlace(
+                        place_id=place.id,
+                        reason=opening_hours_drop_reason,
+                    )
                 )
-                stop_end_minutes = self._time_to_minutes(request.day_start) + place_end_minutes
+                continue
+
+            if place_end_minutes <= available_minutes:
                 ordered_stops.append(
                     PlannedStop(
                         place_id=place.id,
                         place_name=place.name,
                         sequence=len(ordered_stops) + 1,
-                        arrival_time=self._minutes_to_time(stop_arrival_minutes),
-                        start_time=self._minutes_to_time(stop_arrival_minutes),
-                        end_time=self._minutes_to_time(stop_end_minutes),
+                        arrival_time=arrival_time,
+                        start_time=arrival_time,
+                        end_time=end_time,
                         travel_minutes_from_previous=travel_estimate.estimated_duration_minutes,
                         estimated_duration_minutes=place.estimated_duration_minutes,
                     )
@@ -172,6 +191,27 @@ class PlannerService:
         if transport_preferences:
             return transport_preferences[0]
         return get_settings().default_transport_mode
+
+    def _get_opening_hours_drop_reason(
+        self,
+        *,
+        place: PlaceInput,
+        arrival_time: time,
+        end_time: time,
+    ) -> str | None:
+        if place.opens_at is None and place.closes_at is None:
+            return None
+
+        if place.opens_at is not None and arrival_time < place.opens_at:
+            return DROP_REASON_CLOSED_AT_ARRIVAL
+
+        if place.closes_at is not None and arrival_time >= place.closes_at:
+            return DROP_REASON_CLOSED_AT_ARRIVAL
+
+        if place.closes_at is not None and end_time > place.closes_at:
+            return DROP_REASON_CLOSES_BEFORE_VISIT_ENDS
+
+        return None
 
 
 @lru_cache(maxsize=1)
