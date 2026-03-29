@@ -215,6 +215,10 @@ class PlannerService:
             notes.append(
                 LUNCH_INSERTED_NOTE if lunch_inserted else LUNCH_NOT_INSERTED_NOTE
             )
+            if self._meal_client is not None:
+                notes.append(
+                    f"agent4_invocation_mode={get_settings().agent4_invocation_mode}"
+                )
         if agent4_unavailable:
             notes.append(AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE)
         if no_restaurant_candidate_found:
