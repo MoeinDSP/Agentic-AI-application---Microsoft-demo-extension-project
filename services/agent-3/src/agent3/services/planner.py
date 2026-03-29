@@ -8,6 +8,9 @@ from agent3.models.plan import (
     DROP_REASON_CLOSED_AT_ARRIVAL,
     DROP_REASON_CLOSES_BEFORE_VISIT_ENDS,
     DROP_REASON_INSUFFICIENT_TIME,
+    LUNCH_INSERTED_NOTE,
+    LUNCH_NOT_INSERTED_NOTE,
+    STOP_TYPE_LUNCH,
     Coordinates,
     DroppedPlace,
     PlaceInput,
@@ -76,6 +79,7 @@ class PlannerService:
         total_visit_minutes = 0
         current_origin = request.start_location
         used_fallback = False
+        lunch_inserted = False
 
         for place in prioritized_places:
             travel_estimate = self._estimate_travel(
@@ -85,6 +89,28 @@ class PlannerService:
             )
             if travel_estimate.source == "fallback":
                 used_fallback = True
+
+            lunch_stop = self._build_lunch_stop_before_place(
+                request=request,
+                consumed_minutes=consumed_minutes,
+                projected_place_end_minutes=(
+                    self._time_to_minutes(request.day_start)
+                    + consumed_minutes
+                    + travel_estimate.estimated_duration_minutes
+                    + place.estimated_duration_minutes
+                ),
+                sequence=len(ordered_stops) + 1,
+                lunch_inserted=lunch_inserted,
+            )
+            if lunch_stop is not None:
+                ordered_stops.append(lunch_stop)
+                lunch_inserted = True
+                consumed_minutes = (
+                    self._time_to_minutes(lunch_stop.end_time)
+                    - self._time_to_minutes(request.day_start)
+                )
+                total_visit_minutes += request.lunch_duration_minutes
+
             arrival_offset_minutes = consumed_minutes + travel_estimate.estimated_duration_minutes
             place_end_minutes = arrival_offset_minutes + place.estimated_duration_minutes
             stop_arrival_minutes = (
@@ -134,6 +160,17 @@ class PlannerService:
                 )
             )
 
+        lunch_stop = self._build_lunch_stop_after_places(
+            request=request,
+            consumed_minutes=consumed_minutes,
+            sequence=len(ordered_stops) + 1,
+            lunch_inserted=lunch_inserted,
+        )
+        if lunch_stop is not None:
+            ordered_stops.append(lunch_stop)
+            lunch_inserted = True
+            total_visit_minutes += request.lunch_duration_minutes
+
         notes = [
             "deterministic_greedy_planner",
             "travel_time_source=mcp" if not used_fallback else "travel_time_source=fallback",
@@ -141,6 +178,10 @@ class PlannerService:
             f"selected_transport_mode={selected_transport_mode}",
             f"transport_preferences={','.join(request.transport_preferences) or 'none'}",
         ]
+        if request.lunch_required:
+            notes.append(
+                LUNCH_INSERTED_NOTE if lunch_inserted else LUNCH_NOT_INSERTED_NOTE
+            )
         if used_fallback:
             notes.append(
                 f"fallback_travel_minutes={self._fallback_travel_minutes}"
@@ -191,6 +232,88 @@ class PlannerService:
         if transport_preferences:
             return transport_preferences[0]
         return get_settings().default_transport_mode
+
+    def _build_lunch_stop_before_place(
+        self,
+        *,
+        request: PlanRequest,
+        consumed_minutes: int,
+        projected_place_end_minutes: int,
+        sequence: int,
+        lunch_inserted: bool,
+    ) -> PlannedStop | None:
+        if lunch_inserted or not request.lunch_required:
+            return None
+
+        current_time_minutes = self._time_to_minutes(request.day_start) + consumed_minutes
+        lunch_window_start = self._time_to_minutes(request.lunch_time_window_start)
+        lunch_window_end = self._time_to_minutes(request.lunch_time_window_end)
+        lunch_duration = request.lunch_duration_minutes
+        latest_lunch_start = lunch_window_end - lunch_duration
+
+        should_insert_now = (
+            current_time_minutes >= lunch_window_start
+            or current_time_minutes > latest_lunch_start
+            or projected_place_end_minutes > lunch_window_end
+        )
+        if not should_insert_now:
+            return None
+
+        return self._build_lunch_stop(
+            request=request,
+            current_time_minutes=current_time_minutes,
+            sequence=sequence,
+        )
+
+    def _build_lunch_stop_after_places(
+        self,
+        *,
+        request: PlanRequest,
+        consumed_minutes: int,
+        sequence: int,
+        lunch_inserted: bool,
+    ) -> PlannedStop | None:
+        if lunch_inserted or not request.lunch_required:
+            return None
+
+        current_time_minutes = self._time_to_minutes(request.day_start) + consumed_minutes
+        return self._build_lunch_stop(
+            request=request,
+            current_time_minutes=current_time_minutes,
+            sequence=sequence,
+        )
+
+    def _build_lunch_stop(
+        self,
+        *,
+        request: PlanRequest,
+        current_time_minutes: int,
+        sequence: int,
+    ) -> PlannedStop | None:
+        lunch_window_start = self._time_to_minutes(request.lunch_time_window_start)
+        lunch_window_end = self._time_to_minutes(request.lunch_time_window_end)
+        lunch_duration = request.lunch_duration_minutes
+        lunch_start_minutes = max(current_time_minutes, lunch_window_start)
+        lunch_end_minutes = lunch_start_minutes + lunch_duration
+
+        if lunch_end_minutes > lunch_window_end:
+            return None
+        if lunch_end_minutes > self._time_to_minutes(request.day_end):
+            return None
+
+        lunch_start_time = self._minutes_to_time(lunch_start_minutes)
+        lunch_end_time = self._minutes_to_time(lunch_end_minutes)
+        return PlannedStop(
+            stop_type=STOP_TYPE_LUNCH,
+            place_id="lunch",
+            place_name="Lunch",
+            sequence=sequence,
+            arrival_time=lunch_start_time,
+            start_time=lunch_start_time,
+            end_time=lunch_end_time,
+            travel_minutes_from_previous=0,
+            estimated_duration_minutes=lunch_duration,
+        )
 
     def _get_opening_hours_drop_reason(
         self,
