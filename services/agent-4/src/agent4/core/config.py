@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     service_version: str = Field(default="0.1.0")
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8070)
+    public_base_url: str = Field(default="http://127.0.0.1:8070")
+    agent_card_path: str = Field(default="/.well-known/agent-card.json")
+    a2a_path: str = Field(default="/a2a")
     log_level: str = Field(default="INFO")
 
     model_config = SettingsConfigDict(
