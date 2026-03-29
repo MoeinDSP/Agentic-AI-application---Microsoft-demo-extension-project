@@ -1,5 +1,13 @@
+from datetime import time
+
 from agent3.models.mcp import TravelEstimate
-from agent3.models.plan import PlanRequest
+from agent3.models.plan import (
+    LUNCH_INSERTED_NOTE,
+    LUNCH_NOT_INSERTED_NOTE,
+    STOP_TYPE_LUNCH,
+    STOP_TYPE_PLACE,
+    PlanRequest,
+)
 from agent3.services.planner import PlannerService
 
 
@@ -329,3 +337,91 @@ def test_planner_drops_place_when_visit_would_end_after_closing_time() -> None:
     assert response.dropped_places[0].place_id == "colosseum"
     assert response.dropped_places[0].reason == "closes_before_visit_ends"
     assert response.feasibility is False
+
+
+def test_planner_leaves_itinerary_unchanged_when_lunch_is_not_requested() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "pantheon",
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "estimated_duration_minutes": 45,
+                "priority": 4,
+            }
+        ]
+    )
+    request.day_end = time(hour=15, minute=0)
+
+    response = PlannerService(FixedRouteClient(10)).build_plan(request)
+
+    assert [stop.stop_type for stop in response.ordered_stops] == [STOP_TYPE_PLACE]
+    assert LUNCH_INSERTED_NOTE not in response.notes
+    assert LUNCH_NOT_INSERTED_NOTE not in response.notes
+
+
+def test_planner_inserts_lunch_stop_at_earliest_feasible_window_point() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 180,
+                "priority": 5,
+            },
+            {
+                "id": "pantheon",
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "estimated_duration_minutes": 45,
+                "priority": 4,
+            },
+        ]
+    )
+    request.day_end = time(hour=15, minute=0)
+    request.lunch_required = True
+    request.lunch_time_window_start = time(hour=12, minute=0)
+    request.lunch_time_window_end = time(hour=14, minute=0)
+    request.lunch_duration_minutes = 30
+
+    response = PlannerService().build_plan(request)
+
+    assert [stop.place_id for stop in response.ordered_stops] == [
+        "colosseum",
+        "lunch",
+        "pantheon",
+    ]
+    assert response.ordered_stops[1].stop_type == STOP_TYPE_LUNCH
+    assert response.ordered_stops[1].start_time.isoformat() == "12:00:00"
+    assert response.ordered_stops[1].end_time.isoformat() == "12:30:00"
+    assert LUNCH_INSERTED_NOTE in response.notes
+
+
+def test_planner_adds_note_when_required_lunch_cannot_fit() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 180,
+                "priority": 5,
+            }
+        ]
+    )
+    request.day_end = time(hour=12, minute=30)
+    request.lunch_required = True
+    request.lunch_time_window_start = time(hour=12, minute=0)
+    request.lunch_time_window_end = time(hour=13, minute=0)
+    request.lunch_duration_minutes = 45
+
+    response = PlannerService().build_plan(request)
+
+    assert [stop.place_id for stop in response.ordered_stops] == ["colosseum"]
+    assert all(stop.stop_type != STOP_TYPE_LUNCH for stop in response.ordered_stops)
+    assert LUNCH_NOT_INSERTED_NOTE in response.notes

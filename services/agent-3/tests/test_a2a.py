@@ -360,3 +360,59 @@ def test_v1_plan_and_a2a_drop_place_when_visit_ends_after_closing() -> None:
         == "closes_before_visit_ends"
     )
     assert plan_response.json() == a2a_response.json()["output"]
+
+
+def test_v1_plan_and_a2a_insert_same_synthetic_lunch_stop() -> None:
+    planner = PlannerService(FixedRouteClient(0))
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["day_end"] = "15:00:00"
+    payload["lunch_required"] = True
+    payload["lunch_time_window_start"] = "12:00:00"
+    payload["lunch_time_window_end"] = "14:00:00"
+    payload["lunch_duration_minutes"] = 30
+    payload["places"] = [
+        {
+            "id": "colosseum",
+            "name": "Colosseum",
+            "lat": 41.8902,
+            "lng": 12.4922,
+            "estimated_duration_minutes": 180,
+            "priority": 5,
+        },
+        {
+            "id": "pantheon",
+            "name": "Pantheon",
+            "lat": 41.8986,
+            "lng": 12.4769,
+            "estimated_duration_minutes": 45,
+            "priority": 4,
+        },
+    ]
+
+    try:
+        plan_response = client.post("/v1/plan", json=payload)
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-lunch",
+                "action": "plan_day",
+                "input": payload,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert [stop["place_id"] for stop in plan_response.json()["ordered_stops"]] == [
+        "colosseum",
+        "lunch",
+        "pantheon",
+    ]
+    assert plan_response.json()["ordered_stops"][1]["stop_type"] == "lunch"
+    assert plan_response.json()["ordered_stops"][1]["start_time"] == "12:00:00"
+    assert "lunch_inserted" in plan_response.json()["notes"]
+    assert plan_response.json() == a2a_response.json()["output"]
