@@ -1,8 +1,10 @@
 from fastapi.testclient import TestClient
 
 from agent3.main import app
+from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.services.a2a import A2AService, get_a2a_service
+from agent3.services.agent4_client import MealRecommendationError
 from agent3.services.planner import PlannerService, get_planner_service
 
 
@@ -24,6 +26,30 @@ class FailingRouteClient:
         from agent3.services.mcp_client import RouteEstimationError
 
         raise RouteEstimationError("boom")
+
+
+class FixedMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        return MealRecommendationResponse(
+            candidates=[
+                RestaurantCandidate(
+                    id="trattoria-della-luce",
+                    name="Trattoria della Luce",
+                    location={"lat": 41.8991, "lng": 12.4828},
+                    price_level=2,
+                    cuisines=["italian", "roman"],
+                    rating=4.7,
+                    summary="Classic Roman lunch menu with quick pasta dishes.",
+                )
+            ]
+        )
+
+
+class FailingMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        raise MealRecommendationError("boom")
 
 
 def _plan_payload() -> dict[str, object]:
@@ -362,8 +388,11 @@ def test_v1_plan_and_a2a_drop_place_when_visit_ends_after_closing() -> None:
     assert plan_response.json() == a2a_response.json()["output"]
 
 
-def test_v1_plan_and_a2a_insert_same_synthetic_lunch_stop() -> None:
-    planner = PlannerService(FixedRouteClient(0))
+def test_v1_plan_and_a2a_insert_same_restaurant_backed_lunch_stop() -> None:
+    planner = PlannerService(
+        route_client=FixedRouteClient(0),
+        meal_client=FixedMealClient(),
+    )
     app.dependency_overrides[get_planner_service] = lambda: planner
     app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
     client = TestClient(app)
@@ -373,6 +402,8 @@ def test_v1_plan_and_a2a_insert_same_synthetic_lunch_stop() -> None:
     payload["lunch_time_window_start"] = "12:00:00"
     payload["lunch_time_window_end"] = "14:00:00"
     payload["lunch_duration_minutes"] = 30
+    payload["meal_preferences"] = ["italian"]
+    payload["budget_per_meal_per_person"] = 20
     payload["places"] = [
         {
             "id": "colosseum",
@@ -409,10 +440,63 @@ def test_v1_plan_and_a2a_insert_same_synthetic_lunch_stop() -> None:
     assert a2a_response.status_code == 200
     assert [stop["place_id"] for stop in plan_response.json()["ordered_stops"]] == [
         "colosseum",
-        "lunch",
+        "trattoria-della-luce",
         "pantheon",
     ]
-    assert plan_response.json()["ordered_stops"][1]["stop_type"] == "lunch"
+    assert plan_response.json()["ordered_stops"][1]["stop_type"] == "meal"
     assert plan_response.json()["ordered_stops"][1]["start_time"] == "12:00:00"
+    assert (
+        plan_response.json()["ordered_stops"][1]["restaurant"]["id"]
+        == "trattoria-della-luce"
+    )
     assert "lunch_inserted" in plan_response.json()["notes"]
+    assert plan_response.json() == a2a_response.json()["output"]
+
+
+def test_v1_plan_and_a2a_fall_back_to_synthetic_lunch_when_agent4_fails() -> None:
+    planner = PlannerService(
+        route_client=FixedRouteClient(0),
+        meal_client=FailingMealClient(),
+    )
+    app.dependency_overrides[get_planner_service] = lambda: planner
+    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
+    client = TestClient(app)
+    payload = _plan_payload()
+    payload["day_end"] = "15:00:00"
+    payload["lunch_required"] = True
+    payload["lunch_time_window_start"] = "12:00:00"
+    payload["lunch_time_window_end"] = "14:00:00"
+    payload["lunch_duration_minutes"] = 30
+    payload["places"] = [
+        {
+            "id": "colosseum",
+            "name": "Colosseum",
+            "lat": 41.8902,
+            "lng": 12.4922,
+            "estimated_duration_minutes": 180,
+            "priority": 5,
+        }
+    ]
+
+    try:
+        plan_response = client.post("/v1/plan", json=payload)
+        a2a_response = client.post(
+            "/a2a",
+            json={
+                "request_id": "req-lunch-agent4-fallback",
+                "action": "plan_day",
+                "input": payload,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert plan_response.status_code == 200
+    assert a2a_response.status_code == 200
+    assert plan_response.json()["ordered_stops"][1]["stop_type"] == "lunch"
+    assert plan_response.json()["ordered_stops"][1]["place_id"] == "lunch"
+    assert (
+        "agent4_unavailable_using_synthetic_lunch"
+        in plan_response.json()["notes"]
+    )
     assert plan_response.json() == a2a_response.json()["output"]

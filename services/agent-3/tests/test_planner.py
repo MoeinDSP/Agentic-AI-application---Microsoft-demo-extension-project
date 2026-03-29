@@ -1,13 +1,18 @@
 from datetime import time
 
+from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
+    AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE,
     LUNCH_INSERTED_NOTE,
     LUNCH_NOT_INSERTED_NOTE,
+    NO_RESTAURANT_CANDIDATE_FOUND_NOTE,
     STOP_TYPE_LUNCH,
+    STOP_TYPE_MEAL,
     STOP_TYPE_PLACE,
     PlanRequest,
 )
+from agent3.services.agent4_client import MealRecommendationError
 from agent3.services.planner import PlannerService
 
 
@@ -31,6 +36,36 @@ class FailingRouteClient:
         from agent3.services.mcp_client import RouteEstimationError
 
         raise RouteEstimationError("boom")
+
+
+class FixedMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        return MealRecommendationResponse(
+            candidates=[
+                RestaurantCandidate(
+                    id="trattoria-della-luce",
+                    name="Trattoria della Luce",
+                    location={"lat": 41.8991, "lng": 12.4828},
+                    price_level=2,
+                    cuisines=["italian", "roman"],
+                    rating=4.7,
+                    summary="Classic Roman lunch menu with quick pasta dishes.",
+                )
+            ]
+        )
+
+
+class EmptyMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        return MealRecommendationResponse(candidates=[])
+
+
+class FailingMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        raise MealRecommendationError("boom")
 
 
 def _build_request(places: list[dict[str, object]]) -> PlanRequest:
@@ -425,3 +460,97 @@ def test_planner_adds_note_when_required_lunch_cannot_fit() -> None:
     assert [stop.place_id for stop in response.ordered_stops] == ["colosseum"]
     assert all(stop.stop_type != STOP_TYPE_LUNCH for stop in response.ordered_stops)
     assert LUNCH_NOT_INSERTED_NOTE in response.notes
+
+
+def test_planner_enriches_lunch_with_restaurant_backed_meal_stop() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 180,
+                "priority": 5,
+            },
+            {
+                "id": "pantheon",
+                "name": "Pantheon",
+                "lat": 41.8986,
+                "lng": 12.4769,
+                "estimated_duration_minutes": 45,
+                "priority": 4,
+            },
+        ]
+    )
+    request.day_end = time(hour=15, minute=0)
+    request.lunch_required = True
+    request.lunch_time_window_start = time(hour=12, minute=0)
+    request.lunch_time_window_end = time(hour=14, minute=0)
+    request.lunch_duration_minutes = 30
+    request.meal_preferences = ["italian"]
+    request.budget_per_meal_per_person = 20
+
+    response = PlannerService(meal_client=FixedMealClient()).build_plan(request)
+
+    assert [stop.place_id for stop in response.ordered_stops] == [
+        "colosseum",
+        "trattoria-della-luce",
+        "pantheon",
+    ]
+    assert response.ordered_stops[1].stop_type == STOP_TYPE_MEAL
+    assert response.ordered_stops[1].restaurant is not None
+    assert response.ordered_stops[1].restaurant.id == "trattoria-della-luce"
+    assert LUNCH_INSERTED_NOTE in response.notes
+
+
+def test_planner_uses_synthetic_lunch_when_agent4_fails() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 180,
+                "priority": 5,
+            }
+        ]
+    )
+    request.day_end = time(hour=15, minute=0)
+    request.lunch_required = True
+    request.lunch_time_window_start = time(hour=12, minute=0)
+    request.lunch_time_window_end = time(hour=14, minute=0)
+    request.lunch_duration_minutes = 30
+
+    response = PlannerService(meal_client=FailingMealClient()).build_plan(request)
+
+    assert response.ordered_stops[1].stop_type == STOP_TYPE_LUNCH
+    assert response.ordered_stops[1].place_id == "lunch"
+    assert AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE in response.notes
+
+
+def test_planner_uses_synthetic_lunch_when_agent4_returns_no_candidates() -> None:
+    request = _build_request(
+        [
+            {
+                "id": "colosseum",
+                "name": "Colosseum",
+                "lat": 41.8902,
+                "lng": 12.4922,
+                "estimated_duration_minutes": 180,
+                "priority": 5,
+            }
+        ]
+    )
+    request.day_end = time(hour=15, minute=0)
+    request.lunch_required = True
+    request.lunch_time_window_start = time(hour=12, minute=0)
+    request.lunch_time_window_end = time(hour=14, minute=0)
+    request.lunch_duration_minutes = 30
+
+    response = PlannerService(meal_client=EmptyMealClient()).build_plan(request)
+
+    assert response.ordered_stops[1].stop_type == STOP_TYPE_LUNCH
+    assert response.ordered_stops[1].place_id == "lunch"
+    assert NO_RESTAURANT_CANDIDATE_FOUND_NOTE in response.notes
