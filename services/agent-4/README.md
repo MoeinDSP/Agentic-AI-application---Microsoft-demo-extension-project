@@ -61,12 +61,17 @@ uv run ruff check .
 - `AGENT4_SERVICE_VERSION`
 - `AGENT4_HOST`
 - `AGENT4_PORT`
+- `AGENT4_PUBLIC_BASE_URL`
+- `AGENT4_AGENT_CARD_PATH`
+- `AGENT4_A2A_PATH`
 - `AGENT4_LOG_LEVEL`
 
 ## API
 
 - `GET /health`
+- `GET /.well-known/agent-card.json`
 - `POST /v1/recommend-meal`
+- `POST /a2a`
 
 Current mock request fields:
 
@@ -79,6 +84,66 @@ Current mock request fields:
 Current mock response fields:
 
 - `candidates`
+
+## A2A Support
+
+Current scope:
+
+- `GET /.well-known/agent-card.json` exposes discovery metadata.
+- `POST /a2a` accepts a minimal typed A2A-shaped meal recommendation request.
+- `POST /v1/recommend-meal` remains the direct typed API and is still preserved.
+
+Current limitations:
+
+- This is not a full A2A protocol implementation.
+- Authentication is still a local-first placeholder.
+- Agent 4 remains a deterministic mock service.
+
+## Example Requests
+
+Health:
+
+```bash
+curl http://127.0.0.1:8070/health
+```
+
+Agent Card:
+
+```bash
+curl http://127.0.0.1:8070/.well-known/agent-card.json
+```
+
+Direct recommendation request:
+
+```bash
+curl -X POST http://127.0.0.1:8070/v1/recommend-meal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "time_of_day": "lunch",
+    "search_center": {"lat": 41.9, "lng": 12.48},
+    "search_radius_meters": 1000,
+    "budget_per_meal_per_person": 20,
+    "preferences": ["italian"]
+  }'
+```
+
+Minimal A2A request:
+
+```bash
+curl -X POST http://127.0.0.1:8070/a2a \
+  -H "Content-Type: application/json" \
+  -d '{
+    "request_id": "req-123",
+    "action": "recommend_meal",
+    "input": {
+      "time_of_day": "lunch",
+      "search_center": {"lat": 41.9, "lng": 12.48},
+      "search_radius_meters": 1000,
+      "budget_per_meal_per_person": 20,
+      "preferences": ["italian"]
+    }
+  }'
+```
 
 Deterministic ranking inputs:
 
@@ -100,3 +165,4 @@ docker run --rm -p 8070:8070 -e PORT=8070 agent-4:local
 - No external restaurant APIs are used yet.
 - Lunch is the primary supported meal type for now.
 - Agent 3 remains the scheduler. Agent 4 only returns ranked meal candidates.
+- The new A2A layer is a minimal A2A-compatible boundary, not a full spec implementation.
