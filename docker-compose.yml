@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  agent4:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent4_food_recommender
+
+    # Bind to all interfaces so the host firewall / reverse proxy
+    ports:
+      - "${AGENT_HOST:-0.0.0.0}:${AGENT_PORT:-8004}:8004"
+
+    # All secrets injected via .env — nothing hardcoded
+    env_file:
+      - .env
+
+    # GCP service-account key mounted from host
+    volumes:
+      - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials}:/app/credentials:ro
+
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD", "python", "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8004/.well-known/agent.json')"
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
