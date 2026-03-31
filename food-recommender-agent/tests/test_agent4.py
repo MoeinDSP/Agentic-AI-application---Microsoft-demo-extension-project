@@ -160,7 +160,7 @@ class TestWorkerArtifacts:
 
         # Should produce TextPart artifact + DataPart artifact
         assert len(artifacts) == 2
-        kinds = [p.get("kind") for a in artifacts for p in a.parts]
+        kinds = [p.get("kind") for a in artifacts for p in a["parts"]]
         assert "text" in kinds
         assert "data" in kinds
 
