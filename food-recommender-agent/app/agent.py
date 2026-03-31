@@ -1,8 +1,12 @@
+"""
+Vertex AI ADK agent — Agent 4: Food Recommender.
+Uses Gemini API key for local dev, Vertex AI for production.
+"""
 from __future__ import annotations
 
 import json
+import os
 
-import vertexai
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -10,18 +14,18 @@ from google.adk.sessions import InMemorySessionService
 from app.core.config import settings
 from app.tools.places_api import search_restaurants
 
-# ── Initialise Vertex AI SDK ──────────────────────────────────────────────────
-# Credentials are resolved automatically from GOOGLE_APPLICATION_CREDENTIALS
-vertexai.init(
-    project=settings.google_cloud_project,
-    location=settings.google_cloud_location,
-)
+# ── Auth: Vertex AI (production) or Gemini API key (local dev) ───────────────
+if settings.google_cloud_project:
+    # Tell google.genai to use Vertex AI backend
+    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "1"
+    os.environ["GOOGLE_CLOUD_PROJECT"]      = settings.google_cloud_project
+    os.environ["GOOGLE_CLOUD_LOCATION"]     = settings.google_cloud_location
+elif settings.google_api_key:
+    # Use direct Gemini API key
+    os.environ["GOOGLE_API_KEY"] = settings.google_api_key
 
 
 # ── ADK Tool ──────────────────────────────────────────────────────────────────
-# Must be a plain async function so ADK can auto-generate the JSON schema
-# from the type hints and docstring for Gemini's function-calling feature.
-
 async def find_restaurants_tool(
     latitude: float,
     longitude: float,
@@ -74,12 +78,8 @@ food_agent = Agent(
     tools=[find_restaurants_tool],
 )
 
-
 # ── Runner & Session service ──────────────────────────────────────────────────
-# Both are module-level singletons shared across all A2A worker task executions.
-
 session_service = InMemorySessionService()
-
 runner = Runner(
     agent=food_agent,
     app_name="food_recommender",

@@ -37,41 +37,41 @@ class FoodRecommenderWorker(Worker[Context]):
 
         await self.storage.update_task(task["id"], state="working")
 
-        # Rebuild full conversation context from storage
         context: Context = await self.storage.load_context(task["context_id"]) or []
         context.extend(task.get("history", []))
 
-        # Extract the latest user message text
         user_text = self._extract_user_text(task)
-
-        # Build a structured prompt for the ADK agent
-        prompt = self._build_prompt(user_text)
-
-        # Ensure an ADK session exists for this context
+        prompt    = self._build_prompt(user_text)
         session_id = task["context_id"]
-        self._ensure_session(session_id)
 
-        # Run the ADK agent and collect the final response
-        response_text = await self._run_agent(session_id, prompt)
+        try:
+            await self._ensure_session(session_id)
+            response_text = await self._run_agent(session_id, prompt)
 
-        # Package result as an A2A message + artifacts
-        agent_message = Message(
-            role="agent",
-            parts=[TextPart(text=response_text, kind="text")],
-            kind="message",
-            message_id=str(uuid.uuid4()),
-        )
+            agent_message = Message(
+                role="agent",
+                parts=[TextPart(text=response_text, kind="text")],
+                kind="message",
+                message_id=str(uuid.uuid4()),
+            )
 
-        context.append(agent_message)
-        artifacts = self._make_artifacts(response_text)
+            context.append(agent_message)
+            artifacts = self._make_artifacts(response_text)
 
-        await self.storage.update_context(task["context_id"], context)
-        await self.storage.update_task(
-            task["id"],
-            state="completed",
-            new_messages=[agent_message],
-            new_artifacts=artifacts,
-        )
+            await self.storage.update_context(task["context_id"], context)
+            await self.storage.update_task(
+                task["id"],
+                state="completed",
+                new_messages=[agent_message],
+                new_artifacts=artifacts,
+            )
+
+        except Exception as e:
+            import traceback
+            print(f"\n❌ run_task FAILED — task_id={task['id']}")
+            print(f"   Error: {type(e).__name__}: {e}")
+            traceback.print_exc()
+            await self.storage.update_task(task["id"], state="failed")
 
     # ── Cancel handler ────────────────────────────────────────────────────────
 
@@ -91,7 +91,6 @@ class FoodRecommenderWorker(Worker[Context]):
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _extract_user_text(self, task: dict) -> str:
-        """Pull text from the last user message in the task history."""
         for msg in reversed(task.get("history", [])):
             for part in msg.get("parts", []):
                 if part.get("kind") == "text":
@@ -120,16 +119,14 @@ class FoodRecommenderWorker(Worker[Context]):
             # Accept free-form text queries (useful for manual testing)
             return user_text
 
-    def _ensure_session(self, session_id: str) -> None:
-        """Create an ADK session if one does not already exist."""
-        try:
-            session_service.get_session(
-                app_name="food_recommender",
-                user_id="a2a_client",
-                session_id=session_id,
-            )
-        except Exception:
-            session_service.create_session(
+    async def _ensure_session(self, session_id: str) -> None:
+        session = await session_service.get_session(
+            app_name="food_recommender",
+            user_id="a2a_client",
+            session_id=session_id,
+        )
+        if session is None:
+            await session_service.create_session(
                 app_name="food_recommender",
                 user_id="a2a_client",
                 session_id=session_id,
