@@ -9,23 +9,69 @@ from app.models import Location, RestaurantCandidate
 
 _PLACES_BASE = "https://maps.googleapis.com/maps/api/place"
 
-# Google Places price_level thresholds (EUR)
+# Budget → Places API price_level (0-4)
 _BUDGET_TO_PRICE_LEVEL = [
     (15.0, 1),
     (35.0, 2),
     (70.0, 3),
 ]
 
-# Types returned by Places API that carry no cuisine meaning
-_SKIP_TYPES = {"food", "point_of_interest", "establishment", "restaurant"}
+# Types to exclude from cuisine display
+_SKIP_TYPES = {
+    "food", "point_of_interest", "establishment",
+    "restaurant", "store", "health", "premise",
+}
+
+# Map Places API type strings to human-readable cuisine labels
+_CUISINE_MAP: dict[str, str] = {
+    "italian_restaurant":       "Italian",
+    "pizza_restaurant":         "Pizza",
+    "cafe":                     "Café",
+    "bakery":                   "Bakery",
+    "bar":                      "Bar",
+    "fast_food_restaurant":     "Fast Food",
+    "meal_takeaway":            "Takeaway",
+    "meal_delivery":            "Delivery",
+    "japanese_restaurant":      "Japanese",
+    "chinese_restaurant":       "Chinese",
+    "american_restaurant":      "American",
+    "french_restaurant":        "French",
+    "mediterranean_restaurant": "Mediterranean",
+    "seafood_restaurant":       "Seafood",
+    "steak_house":              "Steakhouse",
+    "vegetarian_restaurant":    "Vegetarian",
+    "vegan_restaurant":         "Vegan",
+    "sushi_restaurant":         "Sushi",
+    "indian_restaurant":        "Indian",
+    "mexican_restaurant":       "Mexican",
+    "greek_restaurant":         "Greek",
+    "middle_eastern_restaurant":"Middle Eastern",
+    "brunch_restaurant":        "Brunch",
+    "breakfast_restaurant":     "Breakfast",
+    "wine_bar":                 "Wine Bar",
+}
 
 
 def _budget_to_max_price(budget: float) -> int | None:
-    """Map a per-person EUR budget to a Google Places maxprice level (1-4)."""
     for threshold, level in _BUDGET_TO_PRICE_LEVEL:
         if budget < threshold:
             return level
-    return None  # no restriction above €70
+    return None
+
+
+def _parse_cuisines(types: list[str]) -> list[str]:
+    result = []
+    for t in types:
+        if t in _SKIP_TYPES:
+            continue
+        label = _CUISINE_MAP.get(t)
+        if label:
+            result.append(label)
+        else:
+            # Clean up unknown types: "some_type" → "Some Type"
+            cleaned = t.replace("_", " ").title()
+            result.append(cleaned)
+    return result[:3]
 
 
 async def search_restaurants(
@@ -37,25 +83,17 @@ async def search_restaurants(
     preferences: list[str] | None = None,
 ) -> list[dict]:
     """
-    Search nearby restaurants using the Google Places Nearby Search API.
-
-    Args:
-        latitude:          Latitude of the search centre.
-        longitude:         Longitude of the search centre.
-        radius_meters:     Search radius in metres (100 – 50 000).
-        meal_slot:         'breakfast', 'lunch', or 'dinner'.
-        budget_per_person: Optional max spend per person in EUR.
-        preferences:       Optional cuisine / dietary keywords.
+    Search nearby restaurants using the Google Places Nearby Search API (Legacy).
 
     Returns:
         List of restaurant dicts compatible with RestaurantCandidate.
     """
-    # Build search keyword
     slot_defaults = {
         "breakfast": "breakfast cafe",
         "lunch":     "lunch restaurant",
         "dinner":    "dinner restaurant",
     }
+
     keyword = (
         " ".join(preferences)
         if preferences
@@ -86,12 +124,13 @@ async def search_restaurants(
     candidates: list[dict] = []
 
     for place in data.get("results", [])[:6]:
-        geo = place.get("geometry", {}).get("location", {})
+        geo      = place.get("geometry", {}).get("location", {})
+        types    = place.get("types", [])
+        cuisines = _parse_cuisines(types)
 
-        cuisines = [
-            t for t in place.get("types", [])
-            if t not in _SKIP_TYPES
-        ][:3]
+        # price_level: 0-4 integer (may be absent for some venues)
+        raw_price = place.get("price_level")
+        price_level = int(raw_price) if raw_price is not None else None
 
         candidates.append(
             RestaurantCandidate(
@@ -102,7 +141,7 @@ async def search_restaurants(
                     longitude=geo.get("lng", 0.0),
                     address=place.get("vicinity"),
                 ),
-                price_level=place.get("price_level"),
+                price_level=price_level,
                 cuisines=cuisines or None,
                 rating=place.get("rating"),
                 summary=place.get("editorial_summary", {}).get("overview"),
