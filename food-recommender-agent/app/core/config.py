@@ -17,7 +17,8 @@ class Settings(BaseSettings):
 
     # ── Vertex AI / ADK ───────────────────────────────────────────────────────
     vertex_ai_model: str = "gemini-2.0-flash"
-
+    google_api_key: str = ""
+    
     # ── A2A server ────────────────────────────────────────────────────────────
     agent_host: str = "0.0.0.0"
     agent_port: int = 8004

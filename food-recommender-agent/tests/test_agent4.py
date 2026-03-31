@@ -216,37 +216,50 @@ class TestAgent4Integration:
 
     @pytest.mark.asyncio
     async def test_full_a2a_round_trip_lunch(self, lunch_input):
-        """Send a lunch task and verify a completed response with candidates."""
         import asyncio
 
-        task_id = str(uuid.uuid4())
-        body = {
-            "id": task_id,
-            "message": {
-                "role": "user",
-                "kind": "message",
-                "message_id": str(uuid.uuid4()),
-                "parts": [{"kind": "text", "text": lunch_input.model_dump_json()}],
+        send_body = {
+            "jsonrpc": "2.0",
+            "id":      str(uuid.uuid4()),
+            "method":  "message/send",
+            "params": {
+                "message": {
+                    "role":       "user",
+                    "kind":       "message",
+                    "messageId": str(uuid.uuid4()),
+                    "parts":      [{"kind": "text", "text": lunch_input.model_dump_json()}],
+                },
             },
         }
 
         async with httpx.AsyncClient() as client:
-            # Send task
             send_resp = await client.post(
-                f"{settings.agent_url}/tasks/send",
-                json=body,
+                f"{settings.agent_url}/",
+                json=send_body,
                 timeout=15,
             )
             assert send_resp.status_code == 200
 
+            # Extract task id from response
+            task_id = send_resp.json().get("result", {}).get("id")
+            assert task_id is not None
+
             # Poll until completed (max 60s)
             for _ in range(60):
-                poll_resp = await client.get(
-                    f"{settings.agent_url}/tasks/{task_id}",
+                poll_body = {
+                    "jsonrpc": "2.0",
+                    "id":      str(uuid.uuid4()),
+                    "method":  "tasks/get",
+                    "params":  {"id": task_id},
+                }
+                poll_resp = await client.post(
+                    f"{settings.agent_url}/",
+                    json=poll_body,
                     timeout=10,
                 )
                 assert poll_resp.status_code == 200
-                task = poll_resp.json()
+                data  = poll_resp.json()
+                task  = data.get("result", data)
                 state = task.get("status", {}).get("state", "")
 
                 if state == "completed":
@@ -258,36 +271,44 @@ class TestAgent4Integration:
             else:
                 pytest.fail("Task did not complete within 60s")
 
-        # Verify at least one artifact was returned
         assert len(task.get("artifacts", [])) > 0
 
     @pytest.mark.asyncio
     async def test_task_cancel(self, milan_duomo):
-        """Submit a task then immediately cancel it."""
         inp = FoodRecommenderInput(
             timeofday=MealSlot.breakfast,
             searchcenter=milan_duomo,
             searchradiusmeters=500,
         )
-        task_id = str(uuid.uuid4())
-        body = {
-            "id": task_id,
-            "message": {
-                "role": "user",
-                "kind": "message",
-                "message_id": str(uuid.uuid4()),
-                "parts": [{"kind": "text", "text": inp.model_dump_json()}],
+
+        send_body = {
+            "jsonrpc": "2.0",
+            "id":      str(uuid.uuid4()),
+            "method":  "message/send",
+            "params": {
+                "message": {
+                    "role":       "user",
+                    "kind":       "message",
+                    "messageId": str(uuid.uuid4()),
+                    "parts":      [{"kind": "text", "text": inp.model_dump_json()}],
+                },
             },
         }
 
         async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{settings.agent_url}/tasks/send",
-                json=body,
-                timeout=10,
+            send_resp = await client.post(
+                f"{settings.agent_url}/", json=send_body, timeout=10
             )
+            task_id = send_resp.json().get("result", {}).get("id")
+            assert task_id is not None
+
+            cancel_body = {
+                "jsonrpc": "2.0",
+                "id":      str(uuid.uuid4()),
+                "method":  "tasks/cancel",
+                "params":  {"id": task_id},
+            }
             cancel_resp = await client.post(
-                f"{settings.agent_url}/tasks/{task_id}/cancel",
-                timeout=10,
+                f"{settings.agent_url}/", json=cancel_body, timeout=10
             )
         assert cancel_resp.status_code == 200
