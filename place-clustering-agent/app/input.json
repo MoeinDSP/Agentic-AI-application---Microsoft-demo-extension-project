@@ -1,0 +1,72 @@
+{
+  "input": {
+    "trip_start": "2026-07-10T09:00:00",
+    "trip_end": "2026-07-12T21:00:00",
+    "place_candidates": [
+      {
+        "id": "1",
+        "name": "Duomo di Milano",
+        "location": {
+          "latitude": 45.4642,
+          "longitude": 9.1916,
+          "address": "Piazza del Duomo, Milan"
+        },
+        "estimated_visit_duration_minutes": 90,
+        "estimated_cost": 20,
+        "category": "historical",
+        "rating": 4.8,
+        "summary": "Famous cathedral in Milan",
+        "priority_score": 0.95,
+        "opening_hours": []
+      },
+      {
+        "id": "2",
+        "name": "Sforza Castle",
+        "location": {
+          "latitude": 45.4700,
+          "longitude": 9.1790,
+          "address": "Piazza Castello, Milan"
+        },
+        "estimated_visit_duration_minutes": 120,
+        "estimated_cost": 15,
+        "category": "historical",
+        "rating": 4.7,
+        "summary": "Historic castle",
+        "priority_score": 0.9,
+        "opening_hours": []
+      },
+      {
+        "id": "3",
+        "name": "Navigli",
+        "location": {
+          "latitude": 45.4520,
+          "longitude": 9.1770,
+          "address": "Navigli District, Milan"
+        },
+        "estimated_visit_duration_minutes": 120,
+        "estimated_cost": 0,
+        "category": "leisure",
+        "rating": 4.5,
+        "summary": "Canal area with restaurants",
+        "priority_score": 0.8,
+        "opening_hours": []
+      }
+    ]
+  },
+  "output": {
+    "clustered_place_candidates": [
+      [
+        {
+          "id": "",
+          "name": "",
+          "location": {
+            "latitude": 0,
+            "longitude": 0,
+            "address": ""
+          }
+        }
+      ]
+    ],
+    "warnings": []
+  }
+}
