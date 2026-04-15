@@ -65,14 +65,14 @@ class OrchestratorWorker(Worker[Context]):
                 food_ratio=settings.food_budget_ratio,
             )
 
-            print(f"\n🗺️  Orchestrator received trip request:")
+            print(f"\nOrchestrator received trip request:")
             print(f"   City       : {request.city}")
             print(f"   Dates      : {request.trip_start} → {request.trip_end}")
             print(f"   Num days   : {derived.num_days}")
             print(f"   Budget     : {request.budget}")
 
             # ── Step 1 — Place Recommender (Agent 1 via A2A) ──────────────
-            print("\n📍 Step 1 — Calling Agent 1 (Place Recommender)...")
+            print("\nStep 1 — Calling Agent 1 (Place Recommender)...")
 
             raw_places = await call_place_recommender(
                 city=request.city,
@@ -83,7 +83,7 @@ class OrchestratorWorker(Worker[Context]):
                 preferences=request.preferences,
             )
 
-            print(f"   ✅ Received {len(raw_places)} place candidates")
+            print(f"   Received {len(raw_places)} place candidates")
 
             if not raw_places:
                 result = self._build_result(request, derived, [], [
@@ -94,10 +94,10 @@ class OrchestratorWorker(Worker[Context]):
 
             # Validate place candidates into Pydantic models
             place_candidates = self._parse_places(raw_places)
-            print(f"   ✅ Validated {len(place_candidates)} places")
+            print(f"   Validated {len(place_candidates)} places")
 
             # ── Step 2 — Clustering (Agent 2 via REST) ────────────────────
-            print("\n🧩 Step 2 — Calling Agent 2 (Clustering)...")
+            print("\nStep 2 — Calling Agent 2 (Clustering)...")
 
             clustered_raw = await call_clustering_agent(
                 place_candidates=[p.model_dump(mode="json") for p in place_candidates],
@@ -105,10 +105,10 @@ class OrchestratorWorker(Worker[Context]):
                 trip_end=request.trip_end.isoformat(),
             )
 
-            print(f"   ✅ Received {len(clustered_raw)} clusters")
+            print(f"   Received {len(clustered_raw)} clusters")
 
             # ── Step 3 — Daily Scheduling (per cluster, calls Agent 4) ────
-            print("\n📅 Step 3 — Scheduling each day...")
+            print("\nStep 3 — Scheduling each day...")
 
             daily_schedules: list[DailySchedule] = []
 
@@ -129,10 +129,10 @@ class OrchestratorWorker(Worker[Context]):
                 )
 
                 daily_schedules.append(schedule)
-                print(f"   ✅ Day {day_idx + 1}: {len(schedule.events)} events scheduled")
+                print(f"   Day {day_idx + 1}: {len(schedule.events)} events scheduled")
 
             # ── Step 4 — Verification ─────────────────────────────────────
-            print("\n✔️  Step 4 — Verifying itinerary...")
+            print("\nStep 4 — Verifying itinerary...")
 
             warnings = verify_itinerary(
                 daily_schedules=daily_schedules,
@@ -142,34 +142,34 @@ class OrchestratorWorker(Worker[Context]):
 
             if warnings:
                 for w in warnings:
-                    print(f"   ⚠️  {w}")
+                    print(f"   Warning: {w}")
             else:
-                print("   ✅ All checks passed")
+                print("   All checks passed")
 
             # ── Build & return result ─────────────────────────────────────
             result = self._build_result(request, derived, daily_schedules, warnings)
 
             # ── Step 5 — LLM summary (non-blocking) ──────────────────────
-            print("\n💬 Step 5 — Generating human-friendly summary...")
+            print("\nStep 5 — Generating human-friendly summary...")
             try:
                 summary = await generate_itinerary_summary(
                     json.dumps(result, ensure_ascii=False, default=str)
                 )
                 if summary:
                     result["summary"] = summary
-                    print(f"   ✅ Summary: {summary[:80]}...")
+                    print(f"   Summary: {summary[:80]}...")
             except Exception as e:
-                print(f"   ⚠️  Summary generation skipped: {e}")
+                print(f"   Summary generation skipped: {e}")
 
             await self._complete_task(task, context, result)
 
-            print(f"\n🎉 Orchestrator completed — "
+            print(f"\nOrchestrator completed — "
                   f"{len(daily_schedules)} days, "
                   f"{sum(len(d.events) for d in daily_schedules)} total events\n")
 
         except Exception as e:
             import traceback
-            print(f"\n❌ run_task FAILED — task_id={task['id']}")
+            print(f"\nrun_task FAILED — task_id={task['id']}")
             print(f"   Error: {type(e).__name__}: {e}")
             traceback.print_exc()
             await self.storage.update_task(task["id"], state="failed")
@@ -211,7 +211,7 @@ class OrchestratorWorker(Worker[Context]):
             pass
 
         # Step 2 — LLM extraction via OpenRouter
-        print("   ℹ️  Input is not structured JSON — using LLM to parse...")
+        print("   ℹInput is not structured JSON — using LLM to parse...")
         parsed = await parse_user_request(user_text)
         if parsed is None:
             return None
@@ -219,7 +219,7 @@ class OrchestratorWorker(Worker[Context]):
         try:
             return TripRequest.model_validate(parsed)
         except Exception as e:
-            print(f"   ⚠️  LLM output didn't match TripRequest schema: {e}")
+            print(f"   LLM output didn't match TripRequest schema: {e}")
             return None
 
     async def _fail_with_message(
@@ -255,7 +255,7 @@ class OrchestratorWorker(Worker[Context]):
                 elif isinstance(item, PlaceCandidate):
                     places.append(item)
             except Exception as e:
-                print(f"   ⚠️  Skipping invalid place: {e}")
+                print(f"   Skipping invalid place: {e}")
         return places
 
     def _build_result(
