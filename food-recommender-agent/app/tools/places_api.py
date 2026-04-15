@@ -54,7 +54,7 @@ _CUISINE_MAP: dict[str, str] = {
 
 def _budget_to_max_price(budget: float) -> int | None:
     for threshold, level in _BUDGET_TO_PRICE_LEVEL:
-        if budget < threshold:
+        if budget <= threshold:
             return level
     return None
 
