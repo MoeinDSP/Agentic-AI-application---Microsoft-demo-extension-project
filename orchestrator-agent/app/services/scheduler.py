@@ -223,9 +223,26 @@ async def schedule_day(
 
         place_idx += 1
 
-    # ── Insert dinner if we haven't yet and there's time ──────────────────
-    if "dinner" not in meals_inserted and current_time.hour >= 19 and current_time < day_end:
-        meal_slot = MealSlot.dinner
+    # ── Insert missed meals after all visits are done ───────────────────────
+    remaining_meals = [
+        (MealSlot.lunch,  LUNCH_WINDOW),
+        (MealSlot.dinner, DINNER_WINDOW),
+    ]
+
+    for meal_slot, (window_start, window_end) in remaining_meals:
+        if meal_slot.value in meals_inserted:
+            continue
+        if current_time >= day_end:
+            break
+
+        # Schedule the meal at window_start if we're still before it,
+        # or at current_time if we've already passed the start
+        meal_time = current_time
+        if current_time.hour < window_start:
+            meal_time = current_time.replace(hour=window_start, minute=0, second=0)
+        if meal_time.hour >= window_end or meal_time >= day_end:
+            continue
+
         if events:
             last = events[-1]
             lat = (last.place.location.latitude if isinstance(last, VisitEvent)
@@ -236,7 +253,7 @@ async def schedule_day(
             lat, lon = _centroid(ordered)
 
         restaurant = await _find_restaurant(
-            meal_slot="dinner",
+            meal_slot=meal_slot.value,
             latitude=lat,
             longitude=lon,
             budget_per_person=budget_per_meal,
@@ -244,10 +261,11 @@ async def schedule_day(
         )
         if restaurant:
             events.append(MealEvent(
-                time=current_time,
+                time=meal_time,
                 meal_slot=meal_slot,
                 restaurant=restaurant,
             ))
+            current_time = meal_time + timedelta(minutes=MEAL_DURATION_MINUTES)
 
     return DailySchedule(date=day_date, events=events)
 
