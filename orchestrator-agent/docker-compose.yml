@@ -1,27 +1,8 @@
 version: "3.9"
-
 services:
   orchestrator:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: { context: ., dockerfile: Dockerfile }
     container_name: agent0_orchestrator
-
-    ports:
-      - "${AGENT_HOST:-0.0.0.0}:${AGENT_PORT:-8080}:8080"
-
-    env_file:
-      - .env
-
+    ports: ["${AGENT_PORT:-8080}:8080"]
+    env_file: [.env]
     restart: unless-stopped
-
-    healthcheck:
-      test:
-        [
-          "CMD", "python", "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8080/.well-known/agent.json')"
-        ]
-      interval: 30s
-      timeout: 10s
-      start_period: 15s
-      retries: 3
