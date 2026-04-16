@@ -13,12 +13,6 @@ services:
     env_file:
       - .env
 
-    volumes:
-      - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials}:/app/credentials:ro
-
-    environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
-
     restart: unless-stopped
 
     healthcheck:
