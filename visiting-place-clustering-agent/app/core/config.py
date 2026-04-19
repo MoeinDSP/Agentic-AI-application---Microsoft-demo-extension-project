@@ -8,7 +8,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── OpenAI ────────────────────────────────────────────────────────────────
+    # ── Azure OpenAI (Azure AI Foundry) ──────────────────────────────────────
+    # Set AZURE_OPENAI_ENDPOINT to activate the Azure backend.
+    # Leave blank to use the OpenAI-compatible fallback below.
+    azure_openai_endpoint: str = ""            # e.g. https://<resource>.openai.azure.com
+    azure_openai_api_key: str = ""             # leave blank to use Managed Identity
+    azure_openai_deployment: str = "gpt-4o-mini"   # your Azure deployment name
+    azure_openai_api_version: str = "2024-12-01-preview"
+
+    # ── OpenAI-compatible fallback (local dev / OpenRouter) ──────────────────
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"

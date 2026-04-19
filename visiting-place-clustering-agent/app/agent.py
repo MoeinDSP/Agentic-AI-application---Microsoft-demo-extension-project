@@ -1,9 +1,14 @@
 """
-LLM Agent Brain — OpenAI with tool calling.
+LLM Agent Brain — Azure OpenAI (primary) or OpenAI-compatible fallback.
 
-The clustering agent uses an LLM to intelligently group places into
-geographically coherent day-clusters. The LLM drives the process by
-calling the cluster_by_location tool, which runs K-means on coordinates.
+On Azure AI Foundry the agent uses AsyncAzureOpenAI, authenticated via
+Managed Identity (keyless) or an API key. For local development it falls
+back to any OpenAI-compatible endpoint (OpenRouter, direct OpenAI, etc.)
+controlled by OPENAI_BASE_URL / OPENAI_API_KEY.
+
+Backend selection:
+  - AZURE_OPENAI_ENDPOINT is set  →  AsyncAzureOpenAI
+  - otherwise                     →  AsyncOpenAI (OpenAI / OpenRouter)
 """
 from __future__ import annotations
 
@@ -11,25 +16,54 @@ import json
 from math import ceil
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from app.core.config import settings
 from app.models import ClusteringRequest
 from app.services.clustering import cluster_places
 
 
-# ── OpenAI client ─────────────────────────────────────────────────────────────
+# ── LLM client factory ────────────────────────────────────────────────────────
 
-_client: AsyncOpenAI | None = None
+_client: AsyncOpenAI | AsyncAzureOpenAI | None = None
 
 
-def _get_client() -> AsyncOpenAI:
+def _get_client() -> AsyncOpenAI | AsyncAzureOpenAI:
     global _client
-    if _client is None:
+    if _client is not None:
+        return _client
+
+    if settings.azure_openai_endpoint:
+        # ── Azure AI Foundry path ──────────────────────────────────────────
+        if settings.azure_openai_api_key:
+            # Explicit API key (CI / local dev against Azure)
+            _client = AsyncAzureOpenAI(
+                api_key=settings.azure_openai_api_key,
+                azure_endpoint=settings.azure_openai_endpoint,
+                api_version=settings.azure_openai_api_version,
+            )
+        else:
+            # Managed Identity — keyless, recommended for Azure Container Apps
+            from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
+            credential     = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(
+                credential,
+                "https://cognitiveservices.azure.com/.default",
+            )
+            _client = AsyncAzureOpenAI(
+                azure_ad_token_provider=token_provider,
+                azure_endpoint=settings.azure_openai_endpoint,
+                api_version=settings.azure_openai_api_version,
+            )
+        print(f"   🔷 LLM backend: Azure OpenAI  ({settings.azure_openai_endpoint})")
+    else:
+        # ── OpenAI / OpenRouter fallback (local dev) ───────────────────────
         _client = AsyncOpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
         )
+        print(f"   🟢 LLM backend: OpenAI-compatible  ({settings.openai_base_url})")
+
     return _client
 
 
@@ -161,8 +195,14 @@ async def run_agent(user_text: str) -> str:
     ]
 
     for _round in range(settings.max_tool_rounds):
+        # On Azure this is the deployment name; on OpenAI it's the model string.
+        model_or_deployment = (
+            settings.azure_openai_deployment
+            if settings.azure_openai_endpoint
+            else settings.openai_model
+        )
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=model_or_deployment,
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",
