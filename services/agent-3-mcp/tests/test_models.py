@@ -20,11 +20,23 @@ def test_route_estimate_request_normalizes_mode() -> None:
         {
             "origin": {"lat": 41.9028, "lng": 12.4964},
             "destination": {"lat": 41.8902, "lng": 12.4922},
-            "mode": " WALK ",
+            "mode": " WALKING ",
         }
     )
 
-    assert request.mode == "walk"
+    assert request.mode == "walking"
+
+
+def test_route_estimate_request_accepts_bicycling_mode() -> None:
+    request = RouteEstimateRequest.model_validate(
+        {
+            "origin": {"lat": 41.9028, "lng": 12.4964},
+            "destination": {"lat": 41.8902, "lng": 12.4922},
+            "mode": "bicycling",
+        }
+    )
+
+    assert request.mode == "bicycling"
 
 
 def test_route_estimate_request_rejects_unsupported_mode() -> None:
