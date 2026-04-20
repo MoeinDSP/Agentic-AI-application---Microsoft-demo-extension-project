@@ -21,7 +21,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title=settings.app_name,
-        description="Agent 4 deterministic mock meal recommendation service.",
+        description="Agent 4 deterministic mock lunch and dinner recommendation service.",
         version=settings.service_version,
         lifespan=lifespan,
     )

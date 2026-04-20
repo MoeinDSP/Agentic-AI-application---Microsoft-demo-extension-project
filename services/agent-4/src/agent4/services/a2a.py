@@ -20,7 +20,7 @@ class AgentCardService:
         return AgentCard(
             name="agent-4",
             description=(
-                "Deterministic mock meal recommendation agent for lunch-oriented "
+                "Deterministic mock meal recommendation agent for lunch and dinner "
                 "restaurant discovery."
             ),
             version=self._settings.service_version,
@@ -49,9 +49,9 @@ class AgentCardService:
                     name="Meal Recommendation",
                     description=(
                         "Returns deterministic ranked restaurant candidates for "
-                        "mock lunch recommendation requests."
+                        "mock lunch and dinner recommendation requests."
                     ),
-                    tags=["food", "lunch", "mock", "local-first"],
+                    tags=["food", "lunch", "dinner", "mock", "local-first"],
                 )
             ],
             content_types=["application/json"],

@@ -16,7 +16,7 @@ CATALOG = [
         price_level=2,
         cuisines=["italian", "pasta", "roman"],
         rating=4.7,
-        summary="Classic Roman lunch menu with quick pasta dishes.",
+        summary="Classic Roman lunch and dinner menu with quick pasta dishes.",
     ),
     RestaurantCandidate(
         id="verdura-pranzo-bar",
@@ -25,7 +25,7 @@ CATALOG = [
         price_level=2,
         cuisines=["vegetarian", "salads", "mediterranean"],
         rating=4.5,
-        summary="Vegetable-forward lunch plates with a fast casual format.",
+        summary="Vegetable-forward lunch plates and light dinner options.",
     ),
     RestaurantCandidate(
         id="mercato-panini",
@@ -34,7 +34,7 @@ CATALOG = [
         price_level=1,
         cuisines=["sandwiches", "italian", "street-food"],
         rating=4.3,
-        summary="Budget-friendly panini and takeaway lunch options.",
+        summary="Budget-friendly panini and takeaway lunch or dinner options.",
     ),
     RestaurantCandidate(
         id="osteria-transit-stop",
@@ -43,7 +43,7 @@ CATALOG = [
         price_level=3,
         cuisines=["italian", "seafood"],
         rating=4.8,
-        summary="Higher-end sit-down lunch with quick seafood specials.",
+        summary="Higher-end sit-down lunch and dinner with seafood specials.",
     ),
     RestaurantCandidate(
         id="curry-corner-roma",
@@ -52,7 +52,7 @@ CATALOG = [
         price_level=2,
         cuisines=["indian", "vegetarian", "spicy"],
         rating=4.6,
-        summary="Warm curries and rice bowls that work well for lunch.",
+        summary="Warm curries and rice bowls that work well for lunch or dinner.",
     ),
 ]
 
