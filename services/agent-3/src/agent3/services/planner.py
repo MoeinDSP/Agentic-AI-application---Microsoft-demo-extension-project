@@ -1,4 +1,5 @@
-from datetime import time
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 from functools import lru_cache
 from typing import Protocol
 
@@ -6,28 +7,37 @@ from agent3.core.config import get_settings
 from agent3.models.agent4 import MealRecommendationRequest, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
-    AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE,
-    DROP_REASON_CLOSED_AT_ARRIVAL,
-    DROP_REASON_CLOSES_BEFORE_VISIT_ENDS,
-    DROP_REASON_INSUFFICIENT_TIME,
-    LUNCH_INSERTED_NOTE,
-    LUNCH_NOT_INSERTED_NOTE,
-    NO_RESTAURANT_CANDIDATE_FOUND_NOTE,
-    STOP_TYPE_LUNCH,
-    STOP_TYPE_MEAL,
+    DEFAULT_TRANSPORT_MODE,
+    MEAL_SLOT_DINNER,
+    MEAL_SLOT_LUNCH,
+    WARNING_AGENT4_UNAVAILABLE,
+    WARNING_FALLBACK_TRAVEL,
+    WARNING_MEAL_NOT_INSERTED,
+    WARNING_NO_RESTAURANT_CANDIDATE,
+    WARNING_PLACE_UNSCHEDULED,
     Coordinates,
-    DroppedPlace,
-    PlaceInput,
-    PlannedStop,
-    PlanRequest,
-    PlanResponse,
+    DailySchedule,
+    DaySchedulingRequest,
+    DaySchedulingResult,
+    Location,
+    MealEvent,
+    PlaceCandidate,
     RestaurantSummary,
+    ScheduleEvent,
+    TravelInfo,
+    VisitEvent,
 )
 from agent3.services.agent4_client import MealRecommendationError, get_agent4_meal_client
 from agent3.services.mcp_client import (
     RouteEstimationError,
     get_mcp_route_client,
 )
+
+MEAL_DURATION_MINUTES = 60
+MEAL_WINDOWS = {
+    MEAL_SLOT_LUNCH: (time(hour=12), time(hour=14)),
+    MEAL_SLOT_DINNER: (time(hour=19), time(hour=21)),
+}
 
 
 class RouteEstimator(Protocol):
@@ -60,10 +70,28 @@ class FixedTravelRouteClient:
     ) -> TravelEstimate:
         return TravelEstimate(
             source="fallback",
-            mode=transport_preferences[0] if transport_preferences else "walk",
+            mode=transport_preferences[0] if transport_preferences else DEFAULT_TRANSPORT_MODE,
             estimated_duration_minutes=self._travel_minutes,
             notes=[f"fixed_travel_minutes={self._travel_minutes}"],
         )
+
+
+@dataclass(frozen=True)
+class _TravelPlan:
+    start_time: datetime
+    end_time: datetime
+    origin: Location
+    destination: Location
+    estimate: TravelEstimate
+
+
+@dataclass(frozen=True)
+class _MealInsertion:
+    events: list[ScheduleEvent]
+    current_time: datetime
+    current_location: Location | None
+    warnings: list[str]
+    inserted: bool
 
 
 class PlannerService:
@@ -77,352 +105,496 @@ class PlannerService:
         self._meal_client = meal_client
         self._fallback_travel_minutes = fallback_travel_minutes
 
-    def build_plan(self, request: PlanRequest) -> PlanResponse:
-        selected_transport_mode = self._resolve_transport_mode(request.transport_preferences)
-        available_minutes = self._time_to_minutes(request.day_end) - self._time_to_minutes(
-            request.day_start
-        )
+    def build_plan(self, request: DaySchedulingRequest) -> DaySchedulingResult:
+        transport_mode = self._resolve_transport_mode(request.acceptable_transport_modes)
+        meal_slots = self._meal_slots_for_day(request)
+        per_meal_budget = self._per_meal_budget(request, meal_slots)
+        pending_meals = set(meal_slots)
+        events: list[ScheduleEvent] = []
+        unscheduled_places: list[PlaceCandidate] = []
+        warnings: list[str] = []
+        current_time = request.day_start
+        current_location: Location | None = None
+
         prioritized_places = sorted(
-            request.places,
-            key=lambda place: -place.priority,
+            enumerate(request.places),
+            key=lambda indexed_place: (
+                -(indexed_place[1].priority_score or 0),
+                indexed_place[0],
+            ),
         )
 
-        ordered_stops: list[PlannedStop] = []
-        dropped_places: list[DroppedPlace] = []
-        consumed_minutes = 0
-        total_travel_minutes = 0
-        total_visit_minutes = 0
-        current_origin = request.start_location
-        used_fallback = False
-        lunch_inserted = False
-        agent4_unavailable = False
-        no_restaurant_candidate_found = False
-
-        for place in prioritized_places:
-            travel_estimate = self._estimate_travel(
-                origin=current_origin,
-                destination=place,
-                transport_preferences=[selected_transport_mode],
-            )
-            if travel_estimate.source == "fallback":
-                used_fallback = True
-
-            lunch_stop = self._build_lunch_stop_before_place(
+        for _, place in prioritized_places:
+            current_time, current_location = self._insert_due_meals_before_place(
                 request=request,
-                consumed_minutes=consumed_minutes,
-                projected_place_end_minutes=(
-                    self._time_to_minutes(request.day_start)
-                    + consumed_minutes
-                    + travel_estimate.estimated_duration_minutes
-                    + place.estimated_duration_minutes
-                ),
-                sequence=len(ordered_stops) + 1,
-                lunch_inserted=lunch_inserted,
+                place=place,
+                transport_mode=transport_mode,
+                pending_meals=pending_meals,
+                per_meal_budget=per_meal_budget,
+                current_time=current_time,
+                current_location=current_location,
+                events=events,
+                warnings=warnings,
             )
-            if lunch_stop is not None:
-                lunch_stop, unavailable, no_candidates = self._maybe_enrich_lunch_stop(
-                    lunch_stop=lunch_stop,
-                    current_origin=current_origin,
-                    request=request,
-                )
-                ordered_stops.append(lunch_stop)
-                lunch_inserted = True
-                agent4_unavailable = agent4_unavailable or unavailable
-                no_restaurant_candidate_found = (
-                    no_restaurant_candidate_found or no_candidates
-                )
-                consumed_minutes = (
-                    self._time_to_minutes(lunch_stop.end_time)
-                    - self._time_to_minutes(request.day_start)
-                )
-                total_visit_minutes += request.lunch_duration_minutes
 
-            arrival_offset_minutes = consumed_minutes + travel_estimate.estimated_duration_minutes
-            place_end_minutes = arrival_offset_minutes + place.estimated_duration_minutes
-            stop_arrival_minutes = (
-                self._time_to_minutes(request.day_start) + arrival_offset_minutes
+            travel_plan = self._plan_travel(
+                current_time=current_time,
+                current_location=current_location,
+                destination=place.location,
+                transport_mode=transport_mode,
             )
-            stop_end_minutes = self._time_to_minutes(request.day_start) + place_end_minutes
-            arrival_time = self._minutes_to_time(stop_arrival_minutes)
-            end_time = self._minutes_to_time(stop_end_minutes)
-
-            opening_hours_drop_reason = self._get_opening_hours_drop_reason(
+            arrival_time = travel_plan.end_time if travel_plan is not None else current_time
+            visit_start = self._apply_opening_hours(
                 place=place,
                 arrival_time=arrival_time,
-                end_time=end_time,
+                schedule_date=request.day_start,
             )
-            if opening_hours_drop_reason is not None:
-                dropped_places.append(
-                    DroppedPlace(
-                        place_id=place.id,
-                        reason=opening_hours_drop_reason,
-                    )
-                )
-                continue
-
-            if place_end_minutes <= available_minutes:
-                ordered_stops.append(
-                    PlannedStop(
-                        place_id=place.id,
-                        place_name=place.name,
-                        sequence=len(ordered_stops) + 1,
-                        arrival_time=arrival_time,
-                        start_time=arrival_time,
-                        end_time=end_time,
-                        travel_minutes_from_previous=travel_estimate.estimated_duration_minutes,
-                        estimated_duration_minutes=place.estimated_duration_minutes,
-                    )
-                )
-                consumed_minutes = place_end_minutes
-                total_travel_minutes += travel_estimate.estimated_duration_minutes
-                total_visit_minutes += place.estimated_duration_minutes
-                current_origin = Coordinates(lat=place.lat, lng=place.lng)
-                continue
-
-            dropped_places.append(
-                DroppedPlace(
-                    place_id=place.id,
-                    reason=DROP_REASON_INSUFFICIENT_TIME,
-                )
+            visit_end = visit_start + timedelta(
+                minutes=place.estimated_visit_duration_minutes
             )
-
-        lunch_stop = self._build_lunch_stop_after_places(
-            request=request,
-            consumed_minutes=consumed_minutes,
-            sequence=len(ordered_stops) + 1,
-            lunch_inserted=lunch_inserted,
-        )
-        if lunch_stop is not None:
-            lunch_stop, unavailable, no_candidates = self._maybe_enrich_lunch_stop(
-                lunch_stop=lunch_stop,
-                current_origin=current_origin,
+            drop_reason = self._get_drop_reason(
                 request=request,
+                place=place,
+                visit_start=visit_start,
+                visit_end=visit_end,
             )
-            ordered_stops.append(lunch_stop)
-            lunch_inserted = True
-            agent4_unavailable = agent4_unavailable or unavailable
-            no_restaurant_candidate_found = no_restaurant_candidate_found or no_candidates
-            total_visit_minutes += request.lunch_duration_minutes
+            if drop_reason is not None:
+                unscheduled_places.append(place)
+                warnings.append(f"{WARNING_PLACE_UNSCHEDULED}:{place.id}:{drop_reason}")
+                continue
 
-        notes = [
-            "deterministic_greedy_planner",
-            "travel_time_source=mcp" if not used_fallback else "travel_time_source=fallback",
-            "feasibility=true_when_at_least_one_stop_is_scheduled",
-            f"selected_transport_mode={selected_transport_mode}",
-            f"transport_preferences={','.join(request.transport_preferences) or 'none'}",
-        ]
-        if request.lunch_required:
-            notes.append(
-                LUNCH_INSERTED_NOTE if lunch_inserted else LUNCH_NOT_INSERTED_NOTE
-            )
-            if self._meal_client is not None:
-                notes.append(
-                    f"agent4_invocation_mode={get_settings().agent4_invocation_mode}"
+            if travel_plan is not None:
+                events.append(self._build_travel_event(travel_plan, transport_mode))
+                if travel_plan.estimate.source == "fallback":
+                    warnings.append(
+                        f"{WARNING_FALLBACK_TRAVEL}:{place.id}:"
+                        f"{self._fallback_travel_minutes}"
+                    )
+
+            events.append(
+                VisitEvent(
+                    start_time=visit_start,
+                    end_time=visit_end,
+                    place=place,
                 )
-        if agent4_unavailable:
-            notes.append(AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE)
-        if no_restaurant_candidate_found:
-            notes.append(NO_RESTAURANT_CANDIDATE_FOUND_NOTE)
-        if used_fallback:
-            notes.append(
-                f"fallback_travel_minutes={self._fallback_travel_minutes}"
             )
+            current_time = visit_end
+            current_location = place.location
 
-        return PlanResponse(
-            ordered_stops=ordered_stops,
-            dropped_places=dropped_places,
-            notes=notes,
-            feasibility=bool(ordered_stops),
-            selected_transport_mode=selected_transport_mode,
-            total_travel_minutes=total_travel_minutes,
-            total_visit_minutes=total_visit_minutes,
+        for meal_slot in list(meal_slots):
+            if meal_slot not in pending_meals:
+                continue
+            next_location = request.places[0].location if request.places else None
+            insertion = self._try_insert_meal(
+                request=request,
+                meal_slot=meal_slot,
+                current_time=current_time,
+                current_location=current_location,
+                next_location=next_location,
+                transport_mode=transport_mode,
+                per_meal_budget=per_meal_budget,
+            )
+            pending_meals.remove(meal_slot)
+            events.extend(insertion.events)
+            warnings.extend(insertion.warnings)
+            if insertion.inserted:
+                current_time = insertion.current_time
+                current_location = insertion.current_location
+
+        return DaySchedulingResult(
+            day_schedule=DailySchedule(date=request.day_start.date(), events=events),
+            unscheduled_places=unscheduled_places,
+            warnings=warnings,
         )
 
-    def plan_day(self, request: PlanRequest) -> PlanResponse:
+    def plan_day(self, request: DaySchedulingRequest) -> DaySchedulingResult:
         return self.build_plan(request)
 
-    def _estimate_travel(
+    def _insert_due_meals_before_place(
         self,
         *,
-        origin: Coordinates,
-        destination: PlaceInput,
-        transport_preferences: list[str],
-    ) -> TravelEstimate:
-        try:
-            return self._route_client.estimate_route(
-                origin=origin,
-                destination=Coordinates(lat=destination.lat, lng=destination.lng),
-                transport_preferences=transport_preferences,
+        request: DaySchedulingRequest,
+        place: PlaceCandidate,
+        transport_mode: str,
+        pending_meals: set[str],
+        per_meal_budget: float | None,
+        current_time: datetime,
+        current_location: Location | None,
+        events: list[ScheduleEvent],
+        warnings: list[str],
+    ) -> tuple[datetime, Location | None]:
+        while True:
+            due_slot = self._next_due_meal_slot(
+                request=request,
+                pending_meals=pending_meals,
+                current_time=current_time,
+                current_location=current_location,
+                next_place=place,
+                transport_mode=transport_mode,
             )
-        except RouteEstimationError:
-            return TravelEstimate(
-                source="fallback",
-                mode=transport_preferences[0] if transport_preferences else "walk",
-                estimated_duration_minutes=self._fallback_travel_minutes,
-                notes=[f"fallback_travel_minutes={self._fallback_travel_minutes}"],
+            if due_slot is None:
+                return current_time, current_location
+
+            insertion = self._try_insert_meal(
+                request=request,
+                meal_slot=due_slot,
+                current_time=current_time,
+                current_location=current_location,
+                next_location=place.location,
+                transport_mode=transport_mode,
+                per_meal_budget=per_meal_budget,
             )
+            pending_meals.remove(due_slot)
+            events.extend(insertion.events)
+            warnings.extend(insertion.warnings)
+            if insertion.inserted:
+                current_time = insertion.current_time
+                current_location = insertion.current_location
 
-    def _time_to_minutes(self, value: time) -> int:
-        return value.hour * 60 + value.minute
-
-    def _minutes_to_time(self, total_minutes: int) -> time:
-        hours, minutes = divmod(total_minutes, 60)
-        return time(hour=hours, minute=minutes)
-
-    def _resolve_transport_mode(self, transport_preferences: list[str]) -> str:
-        if transport_preferences:
-            return transport_preferences[0]
-        return get_settings().default_transport_mode
-
-    def _maybe_enrich_lunch_stop(
+    def _next_due_meal_slot(
         self,
         *,
-        lunch_stop: PlannedStop,
-        current_origin: Coordinates,
-        request: PlanRequest,
-    ) -> tuple[PlannedStop, bool, bool]:
+        request: DaySchedulingRequest,
+        pending_meals: set[str],
+        current_time: datetime,
+        current_location: Location | None,
+        next_place: PlaceCandidate,
+        transport_mode: str,
+    ) -> str | None:
+        for meal_slot in sorted(
+            pending_meals,
+            key=lambda slot: self._meal_window_datetimes(request, slot)[0],
+        ):
+            window_start, window_end = self._meal_window_datetimes(request, meal_slot)
+            travel_plan = self._plan_travel(
+                current_time=current_time,
+                current_location=current_location,
+                destination=next_place.location,
+                transport_mode=transport_mode,
+            )
+            arrival_time = travel_plan.end_time if travel_plan is not None else current_time
+            projected_visit_end = arrival_time + timedelta(
+                minutes=next_place.estimated_visit_duration_minutes
+            )
+            if current_time >= window_start or projected_visit_end > window_start:
+                if current_time <= window_end:
+                    return meal_slot
+        return None
+
+    def _try_insert_meal(
+        self,
+        *,
+        request: DaySchedulingRequest,
+        meal_slot: str,
+        current_time: datetime,
+        current_location: Location | None,
+        next_location: Location | None,
+        transport_mode: str,
+        per_meal_budget: float | None,
+    ) -> _MealInsertion:
+        window_start, window_end = self._meal_window_datetimes(request, meal_slot)
+        meal_start = max(current_time, window_start)
+        meal_end = meal_start + timedelta(minutes=MEAL_DURATION_MINUTES)
+        if meal_end > window_end or meal_end > request.day_end:
+            return _MealInsertion(
+                events=[],
+                current_time=current_time,
+                current_location=current_location,
+                warnings=[f"{WARNING_MEAL_NOT_INSERTED}:{meal_slot}:insufficient_time"],
+                inserted=False,
+            )
+
+        search_location = current_location or next_location
+        if search_location is None:
+            return self._synthetic_meal_insertion(
+                meal_slot=meal_slot,
+                meal_start=meal_start,
+                meal_end=meal_end,
+                current_location=current_location,
+                warning=f"{WARNING_NO_RESTAURANT_CANDIDATE}:{meal_slot}",
+            )
+
+        candidate, warning = self._recommend_restaurant(
+            meal_slot=meal_slot,
+            search_location=search_location,
+            request=request,
+            per_meal_budget=per_meal_budget,
+        )
+        if candidate is None:
+            return self._synthetic_meal_insertion(
+                meal_slot=meal_slot,
+                meal_start=meal_start,
+                meal_end=meal_end,
+                current_location=current_location or search_location,
+                warning=warning or f"{WARNING_NO_RESTAURANT_CANDIDATE}:{meal_slot}",
+            )
+
+        restaurant = self._restaurant_summary(candidate)
+        travel_plan = self._plan_travel(
+            current_time=current_time,
+            current_location=current_location,
+            destination=restaurant.location,
+            transport_mode=transport_mode,
+        )
+        events: list[ScheduleEvent] = []
+        warnings: list[str] = []
+        if travel_plan is not None:
+            arrival_time = travel_plan.end_time
+            restaurant_meal_start = max(arrival_time, window_start)
+            restaurant_meal_end = restaurant_meal_start + timedelta(
+                minutes=MEAL_DURATION_MINUTES
+            )
+            if restaurant_meal_end > window_end or restaurant_meal_end > request.day_end:
+                return self._synthetic_meal_insertion(
+                    meal_slot=meal_slot,
+                    meal_start=meal_start,
+                    meal_end=meal_end,
+                    current_location=current_location,
+                    warning=f"{WARNING_MEAL_NOT_INSERTED}:{meal_slot}:restaurant_travel_time",
+                )
+            events.append(self._build_travel_event(travel_plan, transport_mode))
+            if travel_plan.estimate.source == "fallback":
+                warnings.append(
+                    f"{WARNING_FALLBACK_TRAVEL}:{meal_slot}:"
+                    f"{self._fallback_travel_minutes}"
+                )
+            meal_start = restaurant_meal_start
+            meal_end = restaurant_meal_end
+
+        events.append(
+            MealEvent(
+                meal_slot=meal_slot,  # type: ignore[arg-type]
+                start_time=meal_start,
+                end_time=meal_end,
+                restaurant=restaurant,
+                synthetic=False,
+            )
+        )
+        return _MealInsertion(
+            events=events,
+            current_time=meal_end,
+            current_location=restaurant.location,
+            warnings=warnings,
+            inserted=True,
+        )
+
+    def _synthetic_meal_insertion(
+        self,
+        *,
+        meal_slot: str,
+        meal_start: datetime,
+        meal_end: datetime,
+        current_location: Location | None,
+        warning: str,
+    ) -> _MealInsertion:
+        return _MealInsertion(
+            events=[
+                MealEvent(
+                    meal_slot=meal_slot,  # type: ignore[arg-type]
+                    start_time=meal_start,
+                    end_time=meal_end,
+                    restaurant=None,
+                    synthetic=True,
+                )
+            ],
+            current_time=meal_end,
+            current_location=current_location,
+            warnings=[warning],
+            inserted=True,
+        )
+
+    def _recommend_restaurant(
+        self,
+        *,
+        meal_slot: str,
+        search_location: Location,
+        request: DaySchedulingRequest,
+        per_meal_budget: float | None,
+    ) -> tuple[RestaurantCandidate | None, str | None]:
         if self._meal_client is None:
-            return lunch_stop, False, False
+            return None, f"{WARNING_AGENT4_UNAVAILABLE}:{meal_slot}"
 
         meal_request = MealRecommendationRequest(
-            time_of_day="lunch",
-            search_center=current_origin,
+            time_of_day=meal_slot,  # type: ignore[arg-type]
+            search_center=self._to_coordinates(search_location),
             search_radius_meters=2500,
-            budget_per_meal_per_person=request.budget_per_meal_per_person,
-            preferences=request.meal_preferences,
+            budget_per_meal_per_person=per_meal_budget,
+            preferences=request.preferences,
         )
 
         try:
             response = self._meal_client.recommend_meal(meal_request)
         except MealRecommendationError:
-            return lunch_stop, True, False
+            return None, f"{WARNING_AGENT4_UNAVAILABLE}:{meal_slot}"
 
         candidates = getattr(response, "candidates", [])
         if not candidates:
-            return lunch_stop, False, True
+            return None, f"{WARNING_NO_RESTAURANT_CANDIDATE}:{meal_slot}"
+        return candidates[0], None
 
-        return self._apply_restaurant_to_lunch_stop(
-            lunch_stop=lunch_stop,
-            candidate=candidates[0],
-        ), False, False
-
-    def _apply_restaurant_to_lunch_stop(
+    def _plan_travel(
         self,
         *,
-        lunch_stop: PlannedStop,
-        candidate: RestaurantCandidate,
-    ) -> PlannedStop:
-        return lunch_stop.model_copy(
-            update={
-                "stop_type": STOP_TYPE_MEAL,
-                "place_id": candidate.id,
-                "place_name": candidate.name,
-                "restaurant": RestaurantSummary.model_validate(candidate.model_dump()),
-            }
+        current_time: datetime,
+        current_location: Location | None,
+        destination: Location,
+        transport_mode: str,
+    ) -> _TravelPlan | None:
+        if current_location is None:
+            return None
+        estimate = self._estimate_travel(
+            origin=current_location,
+            destination=destination,
+            transport_preferences=[transport_mode],
+        )
+        return _TravelPlan(
+            start_time=current_time,
+            end_time=current_time
+            + timedelta(minutes=estimate.estimated_duration_minutes),
+            origin=current_location,
+            destination=destination,
+            estimate=estimate,
         )
 
-    def _build_lunch_stop_before_place(
+    def _estimate_travel(
         self,
         *,
-        request: PlanRequest,
-        consumed_minutes: int,
-        projected_place_end_minutes: int,
-        sequence: int,
-        lunch_inserted: bool,
-    ) -> PlannedStop | None:
-        if lunch_inserted or not request.lunch_required:
-            return None
+        origin: Location,
+        destination: Location,
+        transport_preferences: list[str],
+    ) -> TravelEstimate:
+        try:
+            return self._route_client.estimate_route(
+                origin=self._to_coordinates(origin),
+                destination=self._to_coordinates(destination),
+                transport_preferences=transport_preferences,
+            )
+        except RouteEstimationError:
+            return TravelEstimate(
+                source="fallback",
+                mode=transport_preferences[0] if transport_preferences else DEFAULT_TRANSPORT_MODE,
+                estimated_duration_minutes=self._fallback_travel_minutes,
+                notes=[f"fallback_travel_minutes={self._fallback_travel_minutes}"],
+            )
 
-        current_time_minutes = self._time_to_minutes(request.day_start) + consumed_minutes
-        lunch_window_start = self._time_to_minutes(request.lunch_time_window_start)
-        lunch_window_end = self._time_to_minutes(request.lunch_time_window_end)
-        lunch_duration = request.lunch_duration_minutes
-        latest_lunch_start = lunch_window_end - lunch_duration
-
-        should_insert_now = (
-            current_time_minutes >= lunch_window_start
-            or current_time_minutes > latest_lunch_start
-            or projected_place_end_minutes > lunch_window_end
+    def _build_travel_event(
+        self,
+        travel_plan: _TravelPlan,
+        transport_mode: str,
+    ) -> TravelInfo:
+        return TravelInfo(
+            start_time=travel_plan.start_time,
+            end_time=travel_plan.end_time,
+            origin=travel_plan.origin,
+            destination=travel_plan.destination,
+            transport_mode=transport_mode,
+            transport_description=(
+                f"{transport_mode} route from "
+                f"{travel_plan.origin.latitude},{travel_plan.origin.longitude} to "
+                f"{travel_plan.destination.latitude},{travel_plan.destination.longitude}"
+            ),
+            estimated_travel_time_minutes=travel_plan.estimate.estimated_duration_minutes,
         )
-        if not should_insert_now:
-            return None
 
-        return self._build_lunch_stop(
-            request=request,
-            current_time_minutes=current_time_minutes,
-            sequence=sequence,
-        )
-
-    def _build_lunch_stop_after_places(
+    def _apply_opening_hours(
         self,
         *,
-        request: PlanRequest,
-        consumed_minutes: int,
-        sequence: int,
-        lunch_inserted: bool,
-    ) -> PlannedStop | None:
-        if lunch_inserted or not request.lunch_required:
-            return None
+        place: PlaceCandidate,
+        arrival_time: datetime,
+        schedule_date: datetime,
+    ) -> datetime:
+        opening_hours = self._opening_hours_for_date(place, schedule_date)
+        if opening_hours is None:
+            return arrival_time
+        open_dt = datetime.combine(arrival_time.date(), opening_hours.open_time)
+        return max(arrival_time, open_dt)
 
-        current_time_minutes = self._time_to_minutes(request.day_start) + consumed_minutes
-        return self._build_lunch_stop(
-            request=request,
-            current_time_minutes=current_time_minutes,
-            sequence=sequence,
-        )
-
-    def _build_lunch_stop(
+    def _get_drop_reason(
         self,
         *,
-        request: PlanRequest,
-        current_time_minutes: int,
-        sequence: int,
-    ) -> PlannedStop | None:
-        lunch_window_start = self._time_to_minutes(request.lunch_time_window_start)
-        lunch_window_end = self._time_to_minutes(request.lunch_time_window_end)
-        lunch_duration = request.lunch_duration_minutes
-        lunch_start_minutes = max(current_time_minutes, lunch_window_start)
-        lunch_end_minutes = lunch_start_minutes + lunch_duration
-
-        if lunch_end_minutes > lunch_window_end:
-            return None
-        if lunch_end_minutes > self._time_to_minutes(request.day_end):
-            return None
-
-        lunch_start_time = self._minutes_to_time(lunch_start_minutes)
-        lunch_end_time = self._minutes_to_time(lunch_end_minutes)
-        return PlannedStop(
-            stop_type=STOP_TYPE_LUNCH,
-            place_id="lunch",
-            place_name="Lunch",
-            sequence=sequence,
-            arrival_time=lunch_start_time,
-            start_time=lunch_start_time,
-            end_time=lunch_end_time,
-            travel_minutes_from_previous=0,
-            estimated_duration_minutes=lunch_duration,
-        )
-
-    def _get_opening_hours_drop_reason(
-        self,
-        *,
-        place: PlaceInput,
-        arrival_time: time,
-        end_time: time,
+        request: DaySchedulingRequest,
+        place: PlaceCandidate,
+        visit_start: datetime,
+        visit_end: datetime,
     ) -> str | None:
-        if place.opens_at is None and place.closes_at is None:
+        if visit_end > request.day_end:
+            return "insufficient_time"
+
+        opening_hours = self._opening_hours_for_date(place, request.day_start)
+        if opening_hours is None:
             return None
 
-        if place.opens_at is not None and arrival_time < place.opens_at:
-            return DROP_REASON_CLOSED_AT_ARRIVAL
-
-        if place.closes_at is not None and arrival_time >= place.closes_at:
-            return DROP_REASON_CLOSED_AT_ARRIVAL
-
-        if place.closes_at is not None and end_time > place.closes_at:
-            return DROP_REASON_CLOSES_BEFORE_VISIT_ENDS
-
+        close_dt = datetime.combine(visit_start.date(), opening_hours.close_time)
+        if visit_start >= close_dt:
+            return "closed_at_arrival"
+        if visit_end > close_dt:
+            return "closes_before_visit_ends"
         return None
+
+    def _opening_hours_for_date(
+        self,
+        place: PlaceCandidate,
+        schedule_date: datetime,
+    ):
+        day_name = schedule_date.strftime("%A").lower()
+        for entry in place.opening_hours:
+            if entry.day_of_week == day_name:
+                return entry
+        return None
+
+    def _meal_slots_for_day(self, request: DaySchedulingRequest) -> list[str]:
+        return [
+            meal_slot
+            for meal_slot in (MEAL_SLOT_LUNCH, MEAL_SLOT_DINNER)
+            if self._window_overlaps_day(request, meal_slot)
+        ]
+
+    def _window_overlaps_day(self, request: DaySchedulingRequest, meal_slot: str) -> bool:
+        window_start, window_end = self._meal_window_datetimes(request, meal_slot)
+        return request.day_start < window_end and request.day_end > window_start
+
+    def _meal_window_datetimes(
+        self,
+        request: DaySchedulingRequest,
+        meal_slot: str,
+    ) -> tuple[datetime, datetime]:
+        window_start, window_end = MEAL_WINDOWS[meal_slot]
+        schedule_date = request.day_start.date()
+        return (
+            datetime.combine(schedule_date, window_start),
+            datetime.combine(schedule_date, window_end),
+        )
+
+    def _per_meal_budget(
+        self,
+        request: DaySchedulingRequest,
+        meal_slots: list[str],
+    ) -> float | None:
+        if request.food_budget_per_day is None or not meal_slots:
+            return None
+        return request.food_budget_per_day / len(meal_slots)
+
+    def _resolve_transport_mode(self, transport_modes: list[str]) -> str:
+        if transport_modes:
+            return transport_modes[0]
+        return get_settings().default_transport_mode
+
+    def _to_coordinates(self, location: Location) -> Coordinates:
+        return Coordinates(lat=location.latitude, lng=location.longitude)
+
+    def _restaurant_summary(self, candidate: RestaurantCandidate) -> RestaurantSummary:
+        return RestaurantSummary(
+            id=candidate.id,
+            name=candidate.name,
+            location=Location(
+                latitude=candidate.location.lat,
+                longitude=candidate.location.lng,
+            ),
+            price_level=candidate.price_level,
+            cuisines=candidate.cuisines,
+            rating=candidate.rating,
+            summary=candidate.summary,
+        )
 
 
 @lru_cache(maxsize=1)

@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from agent3.models.a2a import A2ARequest, A2AResponse, AgentCard
-from agent3.models.plan import HealthResponse, PlanRequest, PlanResponse
+from agent3.models.plan import DaySchedulingRequest, DaySchedulingResult, HealthResponse
 from agent3.services.a2a import (
     A2AService,
     AgentCardService,
@@ -42,9 +42,9 @@ async def handle_a2a_request(
     return a2a_service.handle_request(request)
 
 
-@router.post("/v1/plan", response_model=PlanResponse, tags=["planning"])
+@router.post("/v1/plan", response_model=DaySchedulingResult, tags=["planning"])
 async def plan_day(
-    request: PlanRequest,
+    request: DaySchedulingRequest,
     planner: PlannerDependency,
-) -> PlanResponse:
+) -> DaySchedulingResult:
     return planner.build_plan(request)

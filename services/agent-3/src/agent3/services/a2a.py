@@ -48,8 +48,9 @@ class AgentCardService:
                     id="itinerary-planning",
                     name="Itinerary Planning",
                     description=(
-                        "Builds a deterministic greedy day plan from candidate "
-                        "stops using walk, drive, or transit travel estimates."
+                        "Builds a deterministic day schedule from candidate "
+                        "places using walking, driving, transit, or bicycling "
+                        "travel estimates."
                     ),
                     tags=["planning", "itinerary", "local-first"],
                 )
@@ -86,7 +87,7 @@ class A2AService:
         return A2AResponse(
             request_id=request.request_id,
             status="completed",
-            result_type="plan",
+            result_type="day_schedule",
             output=output,
             notes=[
                 "minimal_a2a_boundary",

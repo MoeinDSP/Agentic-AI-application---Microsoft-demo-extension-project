@@ -7,6 +7,7 @@ from agent3.models.agent4 import (
     AGENT4_INVOCATION_MODE_HTTP,
     SUPPORTED_AGENT4_INVOCATION_MODES,
 )
+from agent3.models.plan import DEFAULT_TRANSPORT_MODE, SUPPORTED_TRANSPORT_MODES
 
 
 class Settings(BaseSettings):
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     agent4_timeout_seconds: float = Field(default=2.0)
     agent4_invocation_mode: str = Field(default=AGENT4_INVOCATION_MODE_HTTP)
     fallback_travel_minutes: int = Field(default=0, ge=0)
-    default_transport_mode: str = Field(default="walk")
+    default_transport_mode: str = Field(default=DEFAULT_TRANSPORT_MODE)
     log_level: str = Field(default="INFO")
 
     @field_validator("agent4_invocation_mode")
@@ -35,6 +36,17 @@ class Settings(BaseSettings):
             supported_modes = ", ".join(sorted(SUPPORTED_AGENT4_INVOCATION_MODES))
             raise ValueError(
                 f"agent4_invocation_mode must be one of: {supported_modes}"
+            )
+        return normalized
+
+    @field_validator("default_transport_mode")
+    @classmethod
+    def validate_default_transport_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_TRANSPORT_MODES:
+            raise ValueError(
+                "default_transport_mode must be one of: "
+                "walking, driving, transit, bicycling"
             )
         return normalized
 

@@ -5,7 +5,7 @@ import httpx
 from agent3.core.config import Settings, get_settings
 from agent3.core.logging import get_logger
 from agent3.models.mcp import MCPRouteEstimateRequest, MCPRouteEstimateResponse, TravelEstimate
-from agent3.models.plan import SUPPORTED_TRANSPORT_MODES, Coordinates
+from agent3.models.plan import DEFAULT_TRANSPORT_MODE, SUPPORTED_TRANSPORT_MODES, Coordinates
 
 
 class RouteEstimationError(Exception):
@@ -71,7 +71,7 @@ class MCPRouteClient:
 
     def resolve_transport_mode(self, transport_preferences: list[str]) -> str:
         if not transport_preferences:
-            return self._settings.default_transport_mode
+            return self._settings.default_transport_mode or DEFAULT_TRANSPORT_MODE
 
         mode = transport_preferences[0]
         if mode not in SUPPORTED_TRANSPORT_MODES:

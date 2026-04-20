@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agent3.models.plan import PlanRequest, PlanResponse
+from agent3.models.plan import DaySchedulingRequest, DaySchedulingResult
 
 
 class AgentSkill(BaseModel):
@@ -39,13 +39,13 @@ class AgentCard(BaseModel):
 class A2ARequest(BaseModel):
     request_id: str = Field(min_length=1)
     action: Literal["plan_day"]
-    input: PlanRequest
+    input: DaySchedulingRequest
     accepted_content_types: list[str] = Field(default_factory=lambda: ["application/json"])
 
 
 class A2AResponse(BaseModel):
     request_id: str = Field(min_length=1)
     status: Literal["completed"]
-    result_type: Literal["plan"]
-    output: PlanResponse
+    result_type: Literal["day_schedule"]
+    output: DaySchedulingResult
     notes: list[str] = Field(default_factory=list)
