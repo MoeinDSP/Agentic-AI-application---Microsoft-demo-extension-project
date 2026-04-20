@@ -127,6 +127,20 @@ curl -X POST http://127.0.0.1:8070/v1/recommend-meal \
   }'
 ```
 
+Dinner recommendation request:
+
+```bash
+curl -X POST http://127.0.0.1:8070/v1/recommend-meal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "time_of_day": "dinner",
+    "search_center": {"lat": 41.9, "lng": 12.48},
+    "search_radius_meters": 1000,
+    "budget_per_meal_per_person": 24,
+    "preferences": ["italian"]
+  }'
+```
+
 Minimal A2A request:
 
 ```bash
