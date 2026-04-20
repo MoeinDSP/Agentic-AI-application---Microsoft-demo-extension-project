@@ -109,9 +109,20 @@ Run the container locally:
 docker run --rm -p 8090:8090 -e PORT=8090 agent-3-mcp:local
 ```
 
+## Route Modes
+
+The route estimate endpoint accepts the public Agent 3 transport values:
+
+- `walking`
+- `driving`
+- `transit`
+- `bicycling`
+
+The current implementation is deterministic and placeholder-based. It estimates
+distance from coordinate gaps and applies a mode-specific duration multiplier.
+
 ## Future Integration Notes
 
-- Supported route-estimate modes are `walk`, `drive`, and `transit`.
 - The mode influences the deterministic placeholder duration returned today.
 - Real route and place providers should replace the deterministic placeholders.
 - The current HTTP tool design is intentionally narrow so it can be wrapped or

@@ -1,8 +1,8 @@
 # Agent 4
 
 Agent 4 is a local-first mock food recommender service. It exposes a typed HTTP
-API for deterministic meal recommendations so Agent 3 can enrich a scheduled
-lunch slot without owning restaurant search logic.
+API for deterministic meal recommendations so Agent 3 can enrich scheduled lunch
+and dinner slots without owning restaurant search logic.
 
 ## Purpose
 
@@ -163,6 +163,6 @@ docker run --rm -p 8070:8070 -e PORT=8070 agent-4:local
 
 - This service is deterministic and mocked.
 - No external restaurant APIs are used yet.
-- Lunch is the primary supported meal type for now.
+- Lunch and dinner are supported by the deterministic mock contract.
 - Agent 3 remains the scheduler. Agent 4 only returns ranked meal candidates.
 - The new A2A layer is a minimal A2A-compatible boundary, not a full spec implementation.
