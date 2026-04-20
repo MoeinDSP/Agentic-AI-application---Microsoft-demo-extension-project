@@ -52,7 +52,7 @@ def test_mcp_route_client_maps_success_response(monkeypatch: pytest.MonkeyPatch)
         lambda timeout: _MockClient(
             response=_MockResponse(
                 {
-                    "mode": "walk",
+                    "mode": "walking",
                     "estimated_distance_km": 1.2,
                     "estimated_duration_minutes": 14,
                     "notes": ["mock_success"],
@@ -65,7 +65,7 @@ def test_mcp_route_client_maps_success_response(monkeypatch: pytest.MonkeyPatch)
     response = client.estimate_route(
         origin=Coordinates(lat=41.9, lng=12.4),
         destination=Coordinates(lat=41.8, lng=12.5),
-        transport_preferences=["walk"],
+        transport_preferences=["walking"],
     )
 
     assert response.source == "mcp"
@@ -99,8 +99,8 @@ def test_mcp_route_client_uses_default_transport_mode_when_preferences_missing(
         transport_preferences=[],
     )
 
-    assert captured["mode"] == "walk"
-    assert response.mode == "walk"
+    assert captured["mode"] == "walking"
+    assert response.mode == "walking"
 
 
 def test_mcp_route_client_uses_explicit_transport_mode(
@@ -126,11 +126,11 @@ def test_mcp_route_client_uses_explicit_transport_mode(
     response = client.estimate_route(
         origin=Coordinates(lat=41.9, lng=12.4),
         destination=Coordinates(lat=41.8, lng=12.5),
-        transport_preferences=["drive"],
+        transport_preferences=["driving"],
     )
 
-    assert captured["mode"] == "drive"
-    assert response.mode == "drive"
+    assert captured["mode"] == "driving"
+    assert response.mode == "driving"
 
 
 def test_mcp_route_client_raises_on_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,7 +145,7 @@ def test_mcp_route_client_raises_on_http_failure(monkeypatch: pytest.MonkeyPatch
         client.estimate_route(
             origin=Coordinates(lat=41.9, lng=12.4),
             destination=Coordinates(lat=41.8, lng=12.5),
-            transport_preferences=["walk"],
+            transport_preferences=["walking"],
         )
 
 

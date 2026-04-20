@@ -1,16 +1,15 @@
-from datetime import time
-
 from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
-    AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE,
-    LUNCH_INSERTED_NOTE,
-    LUNCH_NOT_INSERTED_NOTE,
-    NO_RESTAURANT_CANDIDATE_FOUND_NOTE,
-    STOP_TYPE_LUNCH,
-    STOP_TYPE_MEAL,
-    STOP_TYPE_PLACE,
-    PlanRequest,
+    EVENT_TYPE_MEAL,
+    EVENT_TYPE_TRAVEL,
+    EVENT_TYPE_VISIT,
+    WARNING_AGENT4_UNAVAILABLE,
+    WARNING_FALLBACK_TRAVEL,
+    WARNING_MEAL_NOT_INSERTED,
+    WARNING_NO_RESTAURANT_CANDIDATE,
+    WARNING_PLACE_UNSCHEDULED,
+    DaySchedulingRequest,
 )
 from agent3.services.agent4_client import MealRecommendationError
 from agent3.services.planner import PlannerService
@@ -22,7 +21,7 @@ class FixedRouteClient:
 
     def estimate_route(self, **kwargs: object) -> TravelEstimate:
         transport_preferences = kwargs.get("transport_preferences", [])
-        mode = transport_preferences[0] if transport_preferences else "walk"
+        mode = transport_preferences[0] if transport_preferences else "walking"
         return TravelEstimate(
             source="mcp",
             mode=mode,
@@ -38,9 +37,12 @@ class FailingRouteClient:
         raise RouteEstimationError("boom")
 
 
-class FixedMealClient:
+class CapturingMealClient:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
     def recommend_meal(self, request: object) -> MealRecommendationResponse:
-        _ = request
+        self.requests.append(request)
         return MealRecommendationResponse(
             candidates=[
                 RestaurantCandidate(
@@ -50,7 +52,7 @@ class FixedMealClient:
                     price_level=2,
                     cuisines=["italian", "roman"],
                     rating=4.7,
-                    summary="Classic Roman lunch menu with quick pasta dishes.",
+                    summary="Classic Roman lunch and dinner menu.",
                 )
             ]
         )
@@ -68,490 +70,203 @@ class FailingMealClient:
         raise MealRecommendationError("boom")
 
 
-def _build_request(places: list[dict[str, object]]) -> PlanRequest:
-    return PlanRequest.model_validate(
+def _build_request(
+    *,
+    day_start: str = "2026-04-20T09:00:00",
+    day_end: str = "2026-04-20T11:00:00",
+) -> DaySchedulingRequest:
+    return DaySchedulingRequest.model_validate(
         {
-            "start_location": {"lat": 41.9028, "lng": 12.4964, "name": "Rome"},
-            "day_start": "09:00:00",
-            "day_end": "12:00:00",
-            "transport_preferences": ["walk"],
-            "places": places,
+            "day_start": day_start,
+            "day_end": day_end,
+            "food_budget_per_day": 40,
+            "preferences": ["italian"],
+            "acceptable_transport_modes": ["walking"],
+            "places": [
+                {
+                    "id": "pantheon",
+                    "name": "Pantheon",
+                    "location": {"latitude": 41.8986, "longitude": 12.4769},
+                    "estimated_visit_duration_minutes": 45,
+                    "estimated_cost": 5,
+                    "category": "historical",
+                    "rating": 4.8,
+                    "summary": "Ancient Roman temple.",
+                    "priority_score": 4,
+                },
+                {
+                    "id": "colosseum",
+                    "name": "Colosseum",
+                    "location": {"latitude": 41.8902, "longitude": 12.4922},
+                    "estimated_visit_duration_minutes": 90,
+                    "estimated_cost": 18,
+                    "category": "historical",
+                    "rating": 4.9,
+                    "summary": "Roman amphitheatre.",
+                    "priority_score": 5,
+                },
+            ],
         }
     )
 
 
-def test_planner_schedules_all_places_when_they_fit() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            },
-            {
-                "id": "trevi",
-                "name": "Trevi Fountain",
-                "lat": 41.9009,
-                "lng": 12.4833,
-                "estimated_duration_minutes": 30,
-                "priority": 3,
-            },
-        ]
-    )
+def test_planner_schedules_feasible_visits_by_priority() -> None:
+    request = _build_request()
 
     response = PlannerService().plan_day(request)
 
-    assert [stop.place_id for stop in response.ordered_stops] == ["pantheon", "trevi"]
-    assert response.ordered_stops[0].start_time.isoformat() == "09:00:00"
-    assert response.ordered_stops[0].end_time.isoformat() == "09:45:00"
-    assert response.ordered_stops[1].start_time.isoformat() == "09:45:00"
-    assert response.ordered_stops[1].end_time.isoformat() == "10:15:00"
-    assert response.dropped_places == []
-    assert response.feasibility is True
+    visit_events = [
+        event for event in response.day_schedule.events if event.event_type == EVENT_TYPE_VISIT
+    ]
+    assert [event.place.id for event in visit_events] == ["colosseum"]
+    assert visit_events[0].start_time.isoformat() == "2026-04-20T09:00:00"
+    assert visit_events[0].end_time.isoformat() == "2026-04-20T10:30:00"
+    assert [place.id for place in response.unscheduled_places] == ["pantheon"]
+    assert response.warnings == [f"{WARNING_PLACE_UNSCHEDULED}:pantheon:insufficient_time"]
 
 
-def test_planner_accounts_for_travel_time_when_all_places_fit() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            },
-            {
-                "id": "trevi",
-                "name": "Trevi Fountain",
-                "lat": 41.9009,
-                "lng": 12.4833,
-                "estimated_duration_minutes": 30,
-                "priority": 3,
-            },
-        ]
-    )
+def test_planner_emits_travel_events_between_visits() -> None:
+    request = _build_request(day_end="2026-04-20T12:00:00")
 
     response = PlannerService(FixedRouteClient(10)).plan_day(request)
 
-    assert [stop.place_id for stop in response.ordered_stops] == ["pantheon", "trevi"]
-    assert response.ordered_stops[0].arrival_time.isoformat() == "09:10:00"
-    assert response.ordered_stops[0].start_time.isoformat() == "09:10:00"
-    assert response.ordered_stops[0].end_time.isoformat() == "09:55:00"
-    assert response.ordered_stops[0].travel_minutes_from_previous == 10
-    assert response.ordered_stops[1].arrival_time.isoformat() == "10:05:00"
-    assert response.ordered_stops[1].end_time.isoformat() == "10:35:00"
-    assert response.total_travel_minutes == 20
-    assert response.total_visit_minutes == 75
-    assert response.feasibility is True
+    assert [event.event_type for event in response.day_schedule.events] == [
+        EVENT_TYPE_VISIT,
+        EVENT_TYPE_TRAVEL,
+        EVENT_TYPE_VISIT,
+    ]
+    travel = response.day_schedule.events[1]
+    assert travel.event_type == EVENT_TYPE_TRAVEL
+    assert travel.estimated_travel_time_minutes == 10
+    assert travel.transport_mode == "walking"
 
 
-def test_planner_drops_remaining_places_when_only_some_fit() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 60,
-                "priority": 4,
-            },
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 120,
-                "priority": 5,
-            },
-            {
-                "id": "forum",
-                "name": "Roman Forum",
-                "lat": 41.8925,
-                "lng": 12.4853,
-                "estimated_duration_minutes": 90,
-                "priority": 3,
-            },
-        ]
-    )
-
-    response = PlannerService().plan_day(request)
-
-    assert [stop.place_id for stop in response.ordered_stops] == ["colosseum", "pantheon"]
-    assert [place.place_id for place in response.dropped_places] == ["forum"]
-    assert response.dropped_places[0].reason == "insufficient_time"
-    assert response.feasibility is True
-
-
-def test_planner_drops_place_when_travel_time_pushes_it_past_day_end() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            },
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 90,
-                "priority": 5,
-            },
-        ]
-    )
-
-    response = PlannerService(FixedRouteClient(30)).plan_day(request)
-
-    assert [stop.place_id for stop in response.ordered_stops] == ["colosseum"]
-    assert [place.place_id for place in response.dropped_places] == ["pantheon"]
-    assert response.total_travel_minutes == 30
-    assert response.total_visit_minutes == 90
-
-
-def test_planner_marks_infeasible_when_no_places_fit() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "museum",
-                "name": "Vatican Museums",
-                "lat": 41.9065,
-                "lng": 12.4536,
-                "estimated_duration_minutes": 240,
-                "priority": 5,
-            }
-        ]
-    )
-
-    response = PlannerService().plan_day(request)
-
-    assert response.ordered_stops == []
-    assert response.dropped_places[0].reason == "insufficient_time"
-    assert response.feasibility is False
-
-
-def test_planner_uses_fallback_minutes_when_route_estimation_fails() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            }
-        ]
-    )
+def test_planner_uses_fallback_when_route_estimation_fails() -> None:
+    request = _build_request(day_end="2026-04-20T12:00:00")
 
     response = PlannerService(
         route_client=FailingRouteClient(),
-        fallback_travel_minutes=12,
+        fallback_travel_minutes=7,
     ).plan_day(request)
 
-    assert response.ordered_stops[0].arrival_time.isoformat() == "09:12:00"
-    assert response.ordered_stops[0].travel_minutes_from_previous == 12
-    assert response.total_travel_minutes == 12
-    assert "travel_time_source=fallback" in response.notes
-    assert "fallback_travel_minutes=12" in response.notes
+    travel = response.day_schedule.events[1]
+    assert travel.event_type == EVENT_TYPE_TRAVEL
+    assert travel.estimated_travel_time_minutes == 7
+    assert f"{WARNING_FALLBACK_TRAVEL}:pantheon:7" in response.warnings
 
 
-def test_planner_defaults_to_walk_when_transport_preferences_missing() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            }
-        ]
-    )
-    request.transport_preferences = []
-
-    response = PlannerService(FixedRouteClient(10)).plan_day(request)
-
-    assert response.selected_transport_mode == "walk"
-    assert "selected_transport_mode=walk" in response.notes
-
-
-def test_planner_uses_explicit_drive_mode() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            }
-        ]
-    )
-    request.transport_preferences = ["drive"]
-
-    response = PlannerService(FixedRouteClient(5)).plan_day(request)
-
-    assert response.selected_transport_mode == "drive"
-    assert "selected_transport_mode=drive" in response.notes
-
-
-def test_planner_treats_missing_opening_hours_as_unrestricted() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            }
-        ]
+def test_planner_applies_opening_hours_for_schedule_date() -> None:
+    request = DaySchedulingRequest.model_validate(
+        {
+            "day_start": "2026-04-20T09:00:00",
+            "day_end": "2026-04-20T12:00:00",
+            "acceptable_transport_modes": ["walking"],
+            "places": [
+                {
+                    "id": "pantheon",
+                    "name": "Pantheon",
+                    "location": {"latitude": 41.8986, "longitude": 12.4769},
+                    "estimated_visit_duration_minutes": 45,
+                    "priority_score": 5,
+                    "opening_hours": [
+                        {
+                            "day_of_week": "monday",
+                            "open_time": "10:00:00",
+                            "close_time": "11:00:00",
+                        }
+                    ],
+                }
+            ],
+        }
     )
 
-    response = PlannerService(FixedRouteClient(10)).plan_day(request)
+    response = PlannerService().plan_day(request)
 
-    assert [stop.place_id for stop in response.ordered_stops] == ["pantheon"]
-    assert response.dropped_places == []
-
-
-def test_planner_drops_place_when_arrival_is_before_opening_time() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 90,
-                "priority": 5,
-                "opens_at": "10:00:00",
-                "closes_at": "18:00:00",
-            }
-        ]
-    )
-
-    response = PlannerService(FixedRouteClient(15)).plan_day(request)
-
-    assert response.ordered_stops == []
-    assert response.dropped_places[0].place_id == "colosseum"
-    assert response.dropped_places[0].reason == "closed_at_arrival"
-    assert response.feasibility is False
+    visit = response.day_schedule.events[0]
+    assert visit.event_type == EVENT_TYPE_VISIT
+    assert visit.start_time.isoformat() == "2026-04-20T10:00:00"
+    assert response.unscheduled_places == []
 
 
-def test_planner_drops_place_when_visit_would_end_after_closing_time() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 90,
-                "priority": 5,
-                "opens_at": "09:00:00",
-                "closes_at": "10:00:00",
-            }
-        ]
-    )
+def test_planner_inserts_lunch_and_dinner_with_agent4_candidates() -> None:
+    meal_client = CapturingMealClient()
+    request = _build_request(day_end="2026-04-20T22:00:00")
 
-    response = PlannerService(FixedRouteClient(15)).plan_day(request)
+    response = PlannerService(
+        route_client=FixedRouteClient(10),
+        meal_client=meal_client,
+    ).plan_day(request)
 
-    assert response.ordered_stops == []
-    assert response.dropped_places[0].place_id == "colosseum"
-    assert response.dropped_places[0].reason == "closes_before_visit_ends"
-    assert response.feasibility is False
-
-
-def test_planner_leaves_itinerary_unchanged_when_lunch_is_not_requested() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            }
-        ]
-    )
-    request.day_end = time(hour=15, minute=0)
-
-    response = PlannerService(FixedRouteClient(10)).build_plan(request)
-
-    assert [stop.stop_type for stop in response.ordered_stops] == [STOP_TYPE_PLACE]
-    assert LUNCH_INSERTED_NOTE not in response.notes
-    assert LUNCH_NOT_INSERTED_NOTE not in response.notes
-
-
-def test_planner_inserts_lunch_stop_at_earliest_feasible_window_point() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 180,
-                "priority": 5,
-            },
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            },
-        ]
-    )
-    request.day_end = time(hour=15, minute=0)
-    request.lunch_required = True
-    request.lunch_time_window_start = time(hour=12, minute=0)
-    request.lunch_time_window_end = time(hour=14, minute=0)
-    request.lunch_duration_minutes = 30
-
-    response = PlannerService().build_plan(request)
-
-    assert [stop.place_id for stop in response.ordered_stops] == [
-        "colosseum",
-        "lunch",
-        "pantheon",
+    meal_events = [
+        event for event in response.day_schedule.events if event.event_type == EVENT_TYPE_MEAL
     ]
-    assert response.ordered_stops[1].stop_type == STOP_TYPE_LUNCH
-    assert response.ordered_stops[1].start_time.isoformat() == "12:00:00"
-    assert response.ordered_stops[1].end_time.isoformat() == "12:30:00"
-    assert LUNCH_INSERTED_NOTE in response.notes
-
-
-def test_planner_adds_note_when_required_lunch_cannot_fit() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 180,
-                "priority": 5,
-            }
-        ]
-    )
-    request.day_end = time(hour=12, minute=30)
-    request.lunch_required = True
-    request.lunch_time_window_start = time(hour=12, minute=0)
-    request.lunch_time_window_end = time(hour=13, minute=0)
-    request.lunch_duration_minutes = 45
-
-    response = PlannerService().build_plan(request)
-
-    assert [stop.place_id for stop in response.ordered_stops] == ["colosseum"]
-    assert all(stop.stop_type != STOP_TYPE_LUNCH for stop in response.ordered_stops)
-    assert LUNCH_NOT_INSERTED_NOTE in response.notes
-
-
-def test_planner_enriches_lunch_with_restaurant_backed_meal_stop() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 180,
-                "priority": 5,
-            },
-            {
-                "id": "pantheon",
-                "name": "Pantheon",
-                "lat": 41.8986,
-                "lng": 12.4769,
-                "estimated_duration_minutes": 45,
-                "priority": 4,
-            },
-        ]
-    )
-    request.day_end = time(hour=15, minute=0)
-    request.lunch_required = True
-    request.lunch_time_window_start = time(hour=12, minute=0)
-    request.lunch_time_window_end = time(hour=14, minute=0)
-    request.lunch_duration_minutes = 30
-    request.meal_preferences = ["italian"]
-    request.budget_per_meal_per_person = 20
-
-    response = PlannerService(meal_client=FixedMealClient()).build_plan(request)
-
-    assert [stop.place_id for stop in response.ordered_stops] == [
-        "colosseum",
-        "trattoria-della-luce",
-        "pantheon",
+    assert [event.meal_slot for event in meal_events] == ["lunch", "dinner"]
+    assert all(event.restaurant is not None for event in meal_events)
+    assert all(event.synthetic is False for event in meal_events)
+    assert [request.time_of_day for request in meal_client.requests] == ["lunch", "dinner"]
+    assert [request.budget_per_meal_per_person for request in meal_client.requests] == [
+        20,
+        20,
     ]
-    assert response.ordered_stops[1].stop_type == STOP_TYPE_MEAL
-    assert response.ordered_stops[1].restaurant is not None
-    assert response.ordered_stops[1].restaurant.id == "trattoria-della-luce"
-    assert LUNCH_INSERTED_NOTE in response.notes
-    assert "agent4_invocation_mode=http" in response.notes
 
 
-def test_planner_uses_synthetic_lunch_when_agent4_fails() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 180,
-                "priority": 5,
-            }
-        ]
+def test_planner_accounts_for_restaurant_meal_travel() -> None:
+    request = _build_request(day_end="2026-04-20T15:00:00")
+    request.places[1].estimated_visit_duration_minutes = 180
+
+    response = PlannerService(
+        route_client=FixedRouteClient(10),
+        meal_client=CapturingMealClient(),
+    ).plan_day(request)
+
+    event_types = [event.event_type for event in response.day_schedule.events]
+    assert event_types == [
+        EVENT_TYPE_VISIT,
+        EVENT_TYPE_TRAVEL,
+        EVENT_TYPE_MEAL,
+        EVENT_TYPE_TRAVEL,
+        EVENT_TYPE_VISIT,
+    ]
+    assert response.day_schedule.events[1].estimated_travel_time_minutes == 10
+    assert response.day_schedule.events[3].estimated_travel_time_minutes == 10
+
+
+def test_planner_uses_synthetic_meal_when_agent4_fails() -> None:
+    request = _build_request(day_end="2026-04-20T15:00:00")
+
+    response = PlannerService(meal_client=FailingMealClient()).plan_day(request)
+
+    meal = next(
+        event
+        for event in response.day_schedule.events
+        if event.event_type == EVENT_TYPE_MEAL
     )
-    request.day_end = time(hour=15, minute=0)
-    request.lunch_required = True
-    request.lunch_time_window_start = time(hour=12, minute=0)
-    request.lunch_time_window_end = time(hour=14, minute=0)
-    request.lunch_duration_minutes = 30
-
-    response = PlannerService(meal_client=FailingMealClient()).build_plan(request)
-
-    assert response.ordered_stops[1].stop_type == STOP_TYPE_LUNCH
-    assert response.ordered_stops[1].place_id == "lunch"
-    assert AGENT4_UNAVAILABLE_USING_SYNTHETIC_LUNCH_NOTE in response.notes
+    assert meal.synthetic is True
+    assert meal.restaurant is None
+    assert f"{WARNING_AGENT4_UNAVAILABLE}:lunch" in response.warnings
 
 
-def test_planner_uses_synthetic_lunch_when_agent4_returns_no_candidates() -> None:
-    request = _build_request(
-        [
-            {
-                "id": "colosseum",
-                "name": "Colosseum",
-                "lat": 41.8902,
-                "lng": 12.4922,
-                "estimated_duration_minutes": 180,
-                "priority": 5,
-            }
-        ]
+def test_planner_uses_synthetic_meal_when_agent4_returns_no_candidates() -> None:
+    request = _build_request(day_end="2026-04-20T15:00:00")
+
+    response = PlannerService(meal_client=EmptyMealClient()).plan_day(request)
+
+    meal = next(
+        event
+        for event in response.day_schedule.events
+        if event.event_type == EVENT_TYPE_MEAL
     )
-    request.day_end = time(hour=15, minute=0)
-    request.lunch_required = True
-    request.lunch_time_window_start = time(hour=12, minute=0)
-    request.lunch_time_window_end = time(hour=14, minute=0)
-    request.lunch_duration_minutes = 30
+    assert meal.synthetic is True
+    assert meal.restaurant is None
+    assert f"{WARNING_NO_RESTAURANT_CANDIDATE}:lunch" in response.warnings
 
-    response = PlannerService(meal_client=EmptyMealClient()).build_plan(request)
 
-    assert response.ordered_stops[1].stop_type == STOP_TYPE_LUNCH
-    assert response.ordered_stops[1].place_id == "lunch"
-    assert NO_RESTAURANT_CANDIDATE_FOUND_NOTE in response.notes
+def test_planner_warns_when_meal_window_cannot_fit() -> None:
+    request = _build_request(
+        day_start="2026-04-20T13:30:00",
+        day_end="2026-04-20T14:30:00",
+    )
+
+    response = PlannerService().plan_day(request)
+
+    assert f"{WARNING_MEAL_NOT_INSERTED}:lunch:insufficient_time" in response.warnings
