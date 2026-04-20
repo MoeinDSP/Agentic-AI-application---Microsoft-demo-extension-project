@@ -19,8 +19,8 @@ class RouteEstimateRequest(BaseModel):
     @classmethod
     def normalize_mode(cls, value: str) -> str:
         normalized = value.strip().lower()
-        if normalized not in {"walk", "drive", "transit"}:
-            raise ValueError("mode must be one of: walk, drive, transit")
+        if normalized not in {"walking", "driving", "transit", "bicycling"}:
+            raise ValueError("mode must be one of: walking, driving, transit, bicycling")
         return normalized
 
 

@@ -15,14 +15,16 @@ class ToolService:
         lng_gap = abs(request.origin.lng - request.destination.lng)
         estimated_distance_km = round((lat_gap + lng_gap) * 55, 2)
         mode_multiplier = {
-            "walk": 3.0,
-            "drive": 1.2,
+            "walking": 3.0,
+            "driving": 1.2,
             "transit": 1.8,
+            "bicycling": 2.0,
         }[request.mode]
         minimum_duration = {
-            "walk": 10,
-            "drive": 5,
+            "walking": 10,
+            "driving": 5,
             "transit": 8,
+            "bicycling": 7,
         }[request.mode]
         estimated_duration_minutes = max(
             minimum_duration,
