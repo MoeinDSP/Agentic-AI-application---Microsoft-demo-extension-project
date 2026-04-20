@@ -59,3 +59,20 @@ def test_recommender_returns_no_candidates_when_radius_filters_everything() -> N
     )
 
     assert response.candidates == []
+
+
+def test_recommender_accepts_dinner_requests() -> None:
+    service = RecommenderService()
+
+    response = service.recommend(
+        MealRecommendationRequest(
+            time_of_day="dinner",
+            search_center=Coordinates(lat=41.9, lng=12.48),
+            search_radius_meters=1000,
+            budget_per_meal_per_person=24,
+            preferences=["italian"],
+        )
+    )
+
+    assert response.candidates
+    assert response.candidates[0].id == "trattoria-della-luce"
