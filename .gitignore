@@ -6,8 +6,9 @@
 # Dev containers (local overrides)
 .devcontainer
 
-# Python
+# Python bytecode / cache (never commit)
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so

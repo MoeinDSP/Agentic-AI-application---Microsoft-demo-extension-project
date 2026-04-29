@@ -1,0 +1,62 @@
+place_recommender:
+  name: Place Recommender
+  version: "1.0.0"
+  url: "http://localhost:8000"
+  description: >-
+    Recommends places (restaurants, cafes, hotels, attractions, and other
+    services) based on user preferences and location, powered by Google Maps.
+  provider:
+    organization: MSc Cloud Computing Project
+    url: https://github.com/javad
+  skills:
+    - id: place_search
+      name: Place Search
+      description: >-
+        Search for places near a given location by name, type, or keyword
+        (e.g. "Italian restaurants in Milan", "coffee near Duomo").
+      tags:
+        - search
+        - places
+        - google-maps
+      examples:
+        - "Find a good sushi restaurant near Navigli, Milan"
+        - "What are some museums in Rome?"
+        - "Coffee shops near Politecnico di Milano"
+      input_modes:
+        - text/plain
+      output_modes:
+        - text/plain
+
+    - id: place_details
+      name: Place Details
+      description: >-
+        Retrieve detailed information about a specific place, including address,
+        rating, opening hours, phone number, and website.
+      tags:
+        - details
+        - places
+        - google-maps
+      examples:
+        - "What are the opening hours of Duomo di Milano?"
+        - "Is Eataly in Milan open right now?"
+        - "Give me the address and rating of Osteria Francescana"
+      input_modes:
+        - text/plain
+      output_modes:
+        - text/plain
+
+    - id: directions
+      name: Directions & Distance
+      description: >-
+        Get directions or travel distance between two locations.
+      tags:
+        - directions
+        - distance
+        - google-maps
+      examples:
+        - "How far is Castello Sforzesco from Politecnico di Milano?"
+        - "How do I get from Milan Centrale to the Navigli district?"
+      input_modes:
+        - text/plain
+      output_modes:
+        - text/plain

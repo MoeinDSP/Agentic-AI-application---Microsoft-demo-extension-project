@@ -12,6 +12,16 @@ WORKDIR /place-recommender-agent
 
 ENV PATH="/root/.local/bin:/place-recommender-agent/.venv/bin:${PATH}"
 
+# COPY pyproject.toml uv.lock ./
+
+# RUN uv sync --frozen
+
+# COPY app/ ./app/
+
+# EXPOSE 8000
+
+# CMD ["uvicorn", "main:agent", "--app-dir", "app", "--host", "0.0.0.0", "--port", "8000"]
+
 COPY pyproject.toml ./
 
 RUN uv sync

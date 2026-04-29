@@ -5,8 +5,10 @@ description = "Place recommender agent"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pyyaml>=6.0.0",
     "uvicorn[standard]>=0.32.0",
-    "pydantic-ai>=0.0.14",
-    "fasta2a>=0.6.0",
-    "logfire[pydantic]>=3.0.0",
+    "pydantic-ai>=1.88.0,<2.0.0",
+    "pydantic-settings>=2.14.0,<3.0.0",
+    "fasta2a>=0.6.0,<1.0.0",
+    "logfire>=3.0.0",
 ]
