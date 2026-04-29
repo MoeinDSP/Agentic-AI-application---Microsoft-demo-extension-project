@@ -1,0 +1,54 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Dev containers (local overrides)
+.devcontainer
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+sdist/
+wheels/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Test / coverage / linters / typecheck
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDEs (keep shared VS Code/Cursor repo settings by not ignoring `.vscode/` unless needed)
+.idea/
+*.swp
+*.swo
+*~
