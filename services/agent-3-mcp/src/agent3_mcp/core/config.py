@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     environment: str = Field(default="development")
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8090)
+    google_maps_api_key: str | None = Field(default=None)
+    google_routes_timeout_seconds: float = Field(default=5.0, gt=0)
     log_level: str = Field(default="INFO")
 
     model_config = SettingsConfigDict(

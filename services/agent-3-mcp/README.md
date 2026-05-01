@@ -1,129 +1,56 @@
 # Agent 3 MCP
 
-Agent 3 MCP is an independent HTTP tool service for the Agent 3 planning
-domain. It currently exposes deterministic placeholder endpoints for route
-estimation and place details so the service boundary can stabilize before real
-external integrations are added.
+Agent 3 MCP is the tool service used by Agent 3 for routing and auxiliary place
+lookups. The route estimate endpoint now uses the Google Maps Routes API. The
+place-details endpoint remains placeholder-only in this pass.
 
-## Purpose
+## API
 
-- Keep tool access separate from Agent 3 business logic.
-- Provide a clean HTTP baseline that can later be wrapped for richer MCP
-  protocol support.
-- Stay local-first while remaining deployable to Cloud Run later.
+- `GET /health`
+- `POST /v1/tools/route-estimate`
+- `POST /v1/tools/place-details`
 
-## Structure
+## Route Provider
 
-```text
-src/agent3_mcp/
-  api/
-  core/
-  models/
-  services/
-tests/
-```
+`POST /v1/tools/route-estimate` calls the Google Routes `computeRoutes` REST
+method and maps the result back into the existing MCP response shape:
 
-## Prerequisites
+- `mode`
+- `estimated_distance_km`
+- `estimated_duration_minutes`
+- `notes`
 
-- Python 3.11+
-- `uv`
-
-## Install
-
-```bash
-uv sync --group dev
-```
-
-Or, if `make` is available:
-
-```bash
-make install
-```
-
-## Run
-
-```bash
-uv run python -m uvicorn agent3_mcp.main:app --factory --reload --host 127.0.0.1 --port 8090
-```
-
-Or:
-
-```bash
-make run
-```
-
-## Test
-
-```bash
-uv run pytest
-```
-
-Or:
-
-```bash
-make test
-```
-
-## Lint
-
-```bash
-uv run ruff check .
-```
-
-Or:
-
-```bash
-make lint
-```
-
-## Environment Variables
-
-Copy `.env.example` to `.env` if needed.
-
-- `AGENT3_MCP_APP_NAME`: FastAPI application name.
-- `AGENT3_MCP_ENVIRONMENT`: environment label for logs and config.
-- `AGENT3_MCP_HOST`: bind host for local runs.
-- `AGENT3_MCP_PORT`: bind port for local runs and Cloud Run compatibility.
-- `AGENT3_MCP_LOG_LEVEL`: logging level.
-
-## Developer Workflow
-
-Standard targets:
-
-- `install`
-- `run`
-- `test`
-- `lint`
-
-## Docker Usage
-
-Build the image from the service directory:
-
-```bash
-docker build -t agent-3-mcp:local .
-```
-
-Run the container locally:
-
-```bash
-docker run --rm -p 8090:8090 -e PORT=8090 agent-3-mcp:local
-```
-
-## Route Modes
-
-The route estimate endpoint accepts the public Agent 3 transport values:
+Supported public transport modes:
 
 - `walking`
 - `driving`
 - `transit`
 - `bicycling`
 
-The current implementation is deterministic and placeholder-based. It estimates
-distance from coordinate gaps and applies a mode-specific duration multiplier.
+## Configuration
 
-## Future Integration Notes
+Copy `.env.example` to `.env` if needed.
 
-- The mode influences the deterministic placeholder duration returned today.
-- Real route and place providers should replace the deterministic placeholders.
-- The current HTTP tool design is intentionally narrow so it can be wrapped or
-  upgraded to MCP later without redesigning the service boundary.
+- `AGENT3_MCP_GOOGLE_MAPS_API_KEY`: required for Google Routes requests.
+- `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS`: provider HTTP timeout.
+
+## Run
+
+```bash
+uv sync --group dev
+uv run python -m uvicorn agent3_mcp.main:create_app --factory --reload --host 127.0.0.1 --port 8090
+```
+
+## Test
+
+```bash
+uv run ruff check .
+uv run pytest
+```
+
+## Notes
+
+- Route requests use coordinate-only inputs and request duration and distance.
+- `place-details` is intentionally still placeholder in this pass.
+- For production deployment guidance, see
+  [../../docs/gcp-cloud-run.md](../../docs/gcp-cloud-run.md).

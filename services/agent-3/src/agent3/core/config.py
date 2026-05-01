@@ -4,7 +4,6 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from agent3.models.agent4 import (
-    AGENT4_INVOCATION_MODE_HTTP,
     SUPPORTED_AGENT4_INVOCATION_MODES,
 )
 from agent3.models.plan import DEFAULT_TRANSPORT_MODE, SUPPORTED_TRANSPORT_MODES
@@ -21,9 +20,11 @@ class Settings(BaseSettings):
     a2a_path: str = Field(default="/a2a")
     mcp_base_url: str = Field(default="http://127.0.0.1:8090")
     mcp_timeout_seconds: float = Field(default=2.0)
-    agent4_base_url: str = Field(default="http://127.0.0.1:8070")
+    agent4_base_url: str = Field(default="http://65.21.48.155:8004")
     agent4_timeout_seconds: float = Field(default=2.0)
-    agent4_invocation_mode: str = Field(default=AGENT4_INVOCATION_MODE_HTTP)
+    agent4_invocation_mode: str = Field(default="a2a")
+    agent4_poll_interval_seconds: float = Field(default=1.0, gt=0)
+    agent4_max_wait_seconds: float = Field(default=15.0, gt=0)
     fallback_travel_minutes: int = Field(default=0, ge=0)
     default_transport_mode: str = Field(default=DEFAULT_TRANSPORT_MODE)
     log_level: str = Field(default="INFO")

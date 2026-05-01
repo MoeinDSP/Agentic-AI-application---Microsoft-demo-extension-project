@@ -3,20 +3,27 @@
 Agent 3 is a single-day scheduling service for the trip-planning architecture
 described in the course PDF. It accepts a normalized `DaySchedulingRequest`,
 builds a chronological day schedule, calls the route tool service for travel
-estimates, and calls Agent 4 for restaurant-backed lunch and dinner events.
+estimates, and calls the real external Agent 4 for restaurant-backed lunch and
+dinner events.
 
-The implementation is assignment-MVP scoped: deterministic, local-first, and
-ready to replace with real MCP/provider integrations later.
+The scheduler contract stays stable in this pass, but the integrations now
+target a real external A2A food recommender and a real Google Routes-backed MCP
+service.
 
 ## API
 
 - `GET /health`
 - `GET /.well-known/agent-card.json`
-- `POST /v1/plan`
-- `POST /a2a`
+- `POST /`
 
-`/v1/plan` and `/a2a` use the same scheduling contract. `/a2a` wraps the input
-with `request_id` and `action: "plan_day"`.
+`POST /` is a FastA2A JSON-RPC endpoint. The current implementation supports:
+
+- `message/send`
+- `tasks/get`
+- `tasks/cancel`
+
+`message/send` should include the scheduling payload in
+`params.message.parts[0].data` with `kind: "data"`.
 
 ## Day Scheduling Contract
 
@@ -77,45 +84,66 @@ Schedule events are chronological and use `event_type`:
 - Agent 4 is called for each inserted lunch or dinner.
 - If Agent 4 is unavailable or returns no candidates, Agent 3 inserts a
   synthetic meal event and records a warning.
+- The production-target Agent 4 endpoint is `http://65.21.48.155:8004`.
 
 ## Example
 
 ```bash
-curl -X POST http://127.0.0.1:8080/v1/plan \
+curl -X POST http://127.0.0.1:8080/ \
   -H "Content-Type: application/json" \
   -d '{
-    "day_start": "2026-04-20T09:00:00",
-    "day_end": "2026-04-20T22:00:00",
-    "food_budget_per_day": 40,
-    "preferences": ["italian"],
-    "acceptable_transport_modes": ["walking", "bicycling"],
-    "places": [
-      {
-        "id": "colosseum",
-        "name": "Colosseum",
-        "location": {"latitude": 41.8902, "longitude": 12.4922},
-        "estimated_visit_duration_minutes": 180,
-        "estimated_cost": 18,
-        "category": "historical",
-        "rating": 4.9,
-        "summary": "Roman amphitheatre.",
-        "priority_score": 5,
-        "opening_hours": [
+    "jsonrpc": "2.0",
+    "id": "schedule-1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "message-1",
+        "role": "user",
+        "kind": "message",
+        "parts": [
           {
-            "day_of_week": "monday",
-            "open_time": "09:00:00",
-            "close_time": "18:00:00"
+            "kind": "data",
+            "data": {
+              "day_start": "2026-04-20T09:00:00",
+              "day_end": "2026-04-20T22:00:00",
+              "food_budget_per_day": 40,
+              "preferences": ["italian"],
+              "acceptable_transport_modes": ["walking", "bicycling"],
+              "places": [
+                {
+                  "id": "colosseum",
+                  "name": "Colosseum",
+                  "location": {"latitude": 41.8902, "longitude": 12.4922},
+                  "estimated_visit_duration_minutes": 180,
+                  "estimated_cost": 18,
+                  "category": "historical",
+                  "rating": 4.9,
+                  "summary": "Roman amphitheatre.",
+                  "priority_score": 5,
+                  "opening_hours": [
+                    {
+                      "day_of_week": "monday",
+                      "open_time": "09:00:00",
+                      "close_time": "18:00:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "pantheon",
+                  "name": "Pantheon",
+                  "location": {"latitude": 41.8986, "longitude": 12.4769},
+                  "estimated_visit_duration_minutes": 45,
+                  "priority_score": 4
+                }
+              ]
+            }
           }
         ]
       },
-      {
-        "id": "pantheon",
-        "name": "Pantheon",
-        "location": {"latitude": 41.8986, "longitude": 12.4769},
-        "estimated_visit_duration_minutes": 45,
-        "priority_score": 4
+      "configuration": {
+        "acceptedOutputModes": ["application/json"]
       }
-    ]
+    }
   }'
 ```
 
@@ -129,7 +157,7 @@ uv run python -m uvicorn agent3.main:create_app --factory --reload --host 127.0.
 Local startup order:
 
 1. Start `agent-3-mcp`.
-2. Start `agent-4`.
+2. Ensure the external Agent 4 endpoint is reachable.
 3. Start `agent-3`.
 
 ## Test
@@ -144,5 +172,12 @@ uv run pytest
 - `AGENT3_MCP_BASE_URL`: route tool base URL.
 - `AGENT3_AGENT4_BASE_URL`: Agent 4 base URL.
 - `AGENT3_AGENT4_INVOCATION_MODE`: `http` or `a2a`.
+- `AGENT3_AGENT4_POLL_INTERVAL_SECONDS`: FastA2A poll interval.
+- `AGENT3_AGENT4_MAX_WAIT_SECONDS`: FastA2A max task wait.
 - `AGENT3_FALLBACK_TRAVEL_MINUTES`: deterministic fallback route duration.
 - `AGENT3_DEFAULT_TRANSPORT_MODE`: default public transport mode.
+
+## Deployment
+
+Manual Cloud Run deployment steps and Google Secret Manager wiring are
+documented in [../../docs/gcp-cloud-run.md](../../docs/gcp-cloud-run.md).

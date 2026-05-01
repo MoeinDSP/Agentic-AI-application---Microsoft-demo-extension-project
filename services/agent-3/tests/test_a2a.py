@@ -1,10 +1,11 @@
+import time
+
 from fastapi.testclient import TestClient
 
-from agent3.main import app
+from agent3.main import create_app
 from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
-from agent3.services.a2a import A2AService, get_a2a_service
-from agent3.services.planner import PlannerService, get_planner_service
+from agent3.services.planner import PlannerService
 
 
 class FixedRouteClient:
@@ -66,93 +67,127 @@ def _plan_payload() -> dict[str, object]:
     }
 
 
-def test_agent_card_endpoint_returns_discovery_metadata() -> None:
-    client = TestClient(app)
-
-    response = client.get("/.well-known/agent-card.json")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["name"] == "agent-3"
-    assert payload["interaction_mode"] == "a2a-ready-http"
-    assert payload["auth"]["mode"] == "none"
-    assert any(endpoint["path"] == "/a2a" for endpoint in payload["endpoints"])
-
-
-def test_v1_plan_returns_day_scheduling_result() -> None:
-    client = TestClient(app)
-
-    response = client.post("/v1/plan", json=_plan_payload())
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["day_schedule"]["date"] == "2026-04-20"
-    assert payload["day_schedule"]["events"][0]["event_type"] == "visit"
-    assert payload["day_schedule"]["events"][0]["place"]["id"] == "colosseum"
-    assert "unscheduled_places" in payload
-    assert "warnings" in payload
-
-
-def test_v1_plan_and_a2a_return_consistent_day_schedules() -> None:
+def _build_client() -> TestClient:
     planner = PlannerService(
         route_client=FixedRouteClient(0),
         meal_client=FixedMealClient(),
     )
-    app.dependency_overrides[get_planner_service] = lambda: planner
-    app.dependency_overrides[get_a2a_service] = lambda: A2AService(planner)
-    client = TestClient(app)
+    return TestClient(create_app(planner=planner))
 
-    try:
-        plan_response = client.post("/v1/plan", json=_plan_payload())
-        a2a_response = client.post(
-            "/a2a",
+
+def _send_message(client: TestClient, payload: dict[str, object]) -> dict[str, object]:
+    response = client.post(
+        "/",
+        json={
+            "jsonrpc": "2.0",
+            "id": "req-send",
+            "method": "message/send",
+            "params": {
+                "message": {
+                    "messageId": "msg-123",
+                    "role": "user",
+                    "kind": "message",
+                    "parts": [
+                        {
+                            "kind": "data",
+                            "data": payload,
+                        }
+                    ],
+                },
+                "configuration": {
+                    "acceptedOutputModes": ["application/json"],
+                },
+            },
+        },
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _poll_task(
+    client: TestClient,
+    task_id: str,
+    *,
+    max_attempts: int = 50,
+) -> dict[str, object]:
+    for attempt in range(max_attempts):
+        response = client.post(
+            "/",
             json={
-                "request_id": "req-123",
-                "action": "plan_day",
-                "input": _plan_payload(),
+                "jsonrpc": "2.0",
+                "id": f"req-get-{attempt}",
+                "method": "tasks/get",
+                "params": {"id": task_id},
             },
         )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert plan_response.status_code == 200
-    assert a2a_response.status_code == 200
-    assert a2a_response.json()["result_type"] == "day_schedule"
-    assert plan_response.json() == a2a_response.json()["output"]
-
-
-def test_v1_plan_rejects_empty_places_list() -> None:
-    client = TestClient(app)
-    payload = _plan_payload()
-    payload["places"] = []
-
-    response = client.post("/v1/plan", json=payload)
-
-    assert response.status_code == 422
+        assert response.status_code == 200
+        payload = response.json()
+        task = payload["result"]
+        if task["status"]["state"] in {"completed", "failed"}:
+            return payload
+        time.sleep(0.02)
+    raise AssertionError("task did not reach a terminal state")
 
 
-def test_a2a_rejects_unsupported_transport_mode() -> None:
-    client = TestClient(app)
+def test_health_endpoint_returns_ok() -> None:
+    with _build_client() as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_agent_card_endpoint_returns_fasta2a_metadata() -> None:
+    with _build_client() as client:
+        response = client.get("/.well-known/agent-card.json")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "Daily Scheduler Agent"
+    assert payload["url"] == "http://127.0.0.1:8080"
+    assert payload["protocolVersion"] == "0.3.0"
+    assert payload["defaultInputModes"] == ["application/json"]
+    assert payload["defaultOutputModes"] == ["application/json"]
+    assert payload["skills"][0]["id"] == "day-scheduling"
+    assert payload["capabilities"]["streaming"] is False
+
+
+def test_message_send_and_tasks_get_return_completed_day_schedule() -> None:
+    with _build_client() as client:
+        send_payload = _send_message(client, _plan_payload())
+        task_id = send_payload["result"]["id"]
+        get_payload = _poll_task(client, task_id)
+
+    assert send_payload["result"]["status"]["state"] == "submitted"
+    result_task = get_payload["result"]
+    assert result_task["status"]["state"] == "completed"
+    artifact = result_task["artifacts"][0]["parts"][0]["data"]
+    assert artifact["day_schedule"]["date"] == "2026-04-20"
+    assert artifact["day_schedule"]["events"][0]["event_type"] == "visit"
+    assert artifact["day_schedule"]["events"][0]["place"]["id"] == "colosseum"
+    assert "warnings" in artifact
+
+
+def test_message_send_marks_task_failed_for_invalid_payload() -> None:
     payload = _plan_payload()
     payload["acceptable_transport_modes"] = ["scooter"]
 
-    response = client.post(
-        "/a2a",
-        json={
-            "request_id": "req-unsupported",
-            "action": "plan_day",
-            "input": payload,
-        },
-    )
+    with _build_client() as client:
+        send_payload = _send_message(client, payload)
+        task_id = send_payload["result"]["id"]
+        get_payload = _poll_task(client, task_id)
 
-    assert response.status_code == 422
+    assert get_payload["result"]["status"]["state"] == "failed"
 
 
-def test_v1_plan_supports_bicycling_transport_mode() -> None:
-    client = TestClient(app)
+def test_message_send_supports_bicycling_transport_mode() -> None:
     payload = _plan_payload()
     payload["acceptable_transport_modes"] = ["bicycling"]
 
-    response = client.post("/v1/plan", json=payload)
+    with _build_client() as client:
+        send_payload = _send_message(client, payload)
+        task_id = send_payload["result"]["id"]
+        get_payload = _poll_task(client, task_id)
 
-    assert response.status_code == 200
+    assert send_payload["result"]["status"]["state"] == "submitted"
+    assert get_payload["result"]["status"]["state"] == "completed"
