@@ -16,8 +16,6 @@ class Settings(BaseSettings):
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8080)
     public_base_url: str = Field(default="http://127.0.0.1:8080")
-    agent_card_path: str = Field(default="/.well-known/agent-card.json")
-    a2a_path: str = Field(default="/a2a")
     mcp_base_url: str = Field(default="http://127.0.0.1:8090")
     mcp_timeout_seconds: float = Field(default=2.0)
     agent4_base_url: str = Field(default="http://65.21.48.155:8004")

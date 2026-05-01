@@ -1,6 +1,6 @@
 import time
 
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from agent3.main import create_app
 from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
