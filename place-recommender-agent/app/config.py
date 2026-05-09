@@ -36,8 +36,14 @@ class ProviderEnum(str, Enum):
 
 
 class ModelEnum(str, Enum):
-    QWEN_3_235B_A22B_INSTRUCT_2507 = "qwen-3-235b-a22b-instruct-2507"
+    # Openai models
+    GPT_5_4_MINI = "gpt-5.4-mini"
+
+    # Openrouter models
     OPENAI_GPT_OSS_120B_FREE = "openai/gpt-oss-120b:free"
+
+    # Cerebras models
+    QWEN_3_235B_A22B_INSTRUCT_2507 = "qwen-3-235b-a22b-instruct-2507"
 
 
 @lru_cache(maxsize=None)

@@ -11,10 +11,14 @@ from mcps import create_google_maps_mcp
 logfire.configure(token=settings.logfire_token)
 logfire.instrument_pydantic_ai()
 
+model = create_model(ProviderEnum.OPENAI, ModelEnum.GPT_5_4_MINI.value)
+
+google_maps_mcp = create_google_maps_mcp()
+
 agent_factory = AgentFactory(
     agent_enum=AgentEnum.PLACE_RECOMMENDER,
-    model=create_model(ProviderEnum.OPENROUTER, ModelEnum.OPENAI_GPT_OSS_120B_FREE.value),
-    toolsets=[create_google_maps_mcp()],
+    model=model,
+    toolsets=[google_maps_mcp],
 )
 
 
