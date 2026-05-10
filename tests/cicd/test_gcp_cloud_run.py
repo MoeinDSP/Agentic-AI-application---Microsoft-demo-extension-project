@@ -9,6 +9,7 @@ from tools.cicd.gcp_cloud_run import (
     build_run_deploy_command,
     resolve_env_vars,
     resolve_secret_bindings,
+    smoke_check_service,
 )
 from tools.cicd.metadata import load_manifests
 
@@ -35,6 +36,7 @@ class GcpCloudRunTests(unittest.TestCase):
             manifests["agent-3"],
             deployed_urls={"agent-3-mcp": "https://agent-3-mcp.example.com"},
             region="europe-west1",
+            allow_missing_service_url=True,
         )
 
         self.assertEqual(env_vars["AGENT3_MCP_BASE_URL"], "https://agent-3-mcp.example.com")
@@ -79,9 +81,39 @@ class GcpCloudRunTests(unittest.TestCase):
                 manifests["agent-3"],
                 deployed_urls={},
                 region="europe-west1",
+                allow_missing_service_url=True,
             )
 
         self.assertEqual(
             env_vars["AGENT3_MCP_BASE_URL"],
             "https://existing-agent-3-mcp.example.com",
         )
+
+    def test_resolve_env_vars_includes_service_url_for_self_advertisement(self) -> None:
+        manifests = load_manifests()
+        os.environ["AGENT3_AGENT4_BASE_URL"] = "https://external-agent4.example.com"
+        self.addCleanup(os.environ.pop, "AGENT3_AGENT4_BASE_URL", None)
+
+        env_vars = resolve_env_vars(
+            manifests["agent-3"],
+            deployed_urls={"agent-3-mcp": "https://agent-3-mcp.example.com"},
+            region="europe-west1",
+            service_url="https://agent-3.example.com",
+        )
+
+        self.assertEqual(
+            env_vars["AGENT3_PUBLIC_BASE_URL"],
+            "https://agent-3.example.com",
+        )
+
+    def test_smoke_check_service_rejects_agent_card_url_mismatch(self) -> None:
+        manifest = load_manifests()["agent-3"]
+        with patch(
+            "tools.cicd.gcp_cloud_run._http_request",
+            return_value={"url": "https://wrong.example.com"},
+        ):
+            with self.assertRaisesRegex(ValueError, "Agent card URL does not match"):
+                smoke_check_service(
+                    manifest,
+                    service_url="https://agent-3.example.com",
+                )

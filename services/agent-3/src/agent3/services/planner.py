@@ -333,8 +333,17 @@ class PlannerService:
             )
 
         restaurant = self._restaurant_summary(candidate)
+        meal_travel_start = current_time
+        if current_location is not None and current_time < window_start:
+            meal_travel_start = self._defer_meal_travel_until_needed(
+                current_time=current_time,
+                window_start=window_start,
+                current_location=current_location,
+                restaurant_location=restaurant.location,
+                transport_mode=transport_mode,
+            )
         travel_plan = self._plan_travel(
-            current_time=current_time,
+            current_time=meal_travel_start,
             current_location=current_location,
             destination=restaurant.location,
             transport_mode=transport_mode,
@@ -380,6 +389,26 @@ class PlannerService:
             warnings=warnings,
             inserted=True,
         )
+
+    def _defer_meal_travel_until_needed(
+        self,
+        *,
+        current_time: datetime,
+        window_start: datetime,
+        current_location: Location,
+        restaurant_location: Location,
+        transport_mode: str,
+    ) -> datetime:
+        preview_estimate = self._estimate_travel(
+            origin=current_location,
+            destination=restaurant_location,
+            transport_preferences=[transport_mode],
+            departure_time=window_start,
+        )
+        latest_departure = window_start - timedelta(
+            minutes=preview_estimate.estimated_duration_minutes
+        )
+        return max(current_time, latest_departure)
 
     def _synthetic_meal_insertion(
         self,

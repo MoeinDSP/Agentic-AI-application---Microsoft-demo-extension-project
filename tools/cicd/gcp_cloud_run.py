@@ -28,6 +28,8 @@ def resolve_env_vars(
     *,
     deployed_urls: dict[str, str],
     region: str,
+    service_url: str | None = None,
+    allow_missing_service_url: bool = False,
 ) -> dict[str, str]:
     resolved: dict[str, str] = {}
     for key, definition in manifest.deploy.get("required_env", {}).items():
@@ -47,6 +49,17 @@ def resolve_env_vars(
                 _cloud_run_service_name(load_manifests()[dependency]),
                 region=region,
             )
+            continue
+        if source == "service_url":
+            if service_url:
+                resolved[key] = service_url.rstrip("/")
+                continue
+            if allow_missing_service_url:
+                continue
+            resolved[key] = fetch_service_url(
+                _cloud_run_service_name(manifest),
+                region=region,
+            ).rstrip("/")
             continue
         raise ValueError(f"unsupported env source: {source}")
     return resolved
@@ -120,7 +133,8 @@ def smoke_check_service(
     *,
     service_url: str,
 ) -> None:
-    _http_request("GET", f"{service_url.rstrip('/')}{manifest.healthcheck}")
+    normalized_service_url = service_url.rstrip("/")
+    _http_request("GET", f"{normalized_service_url}{manifest.healthcheck}")
     smoke_type = manifest.smoke_check_type
     if smoke_type == "route-estimate":
         payload = {
@@ -136,9 +150,18 @@ def smoke_check_service(
         )
         return
     if smoke_type == "fasta2a-day-schedule":
-        _http_request("GET", f"{service_url.rstrip('/')}/.well-known/agent-card.json")
-        task_id = _send_agent3_message(service_url)
-        _poll_agent3_task(service_url, task_id)
+        agent_card = _http_request(
+            "GET",
+            f"{normalized_service_url}/.well-known/agent-card.json",
+        )
+        advertised_url = str(agent_card.get("url", "")).rstrip("/")
+        if advertised_url != normalized_service_url:
+            raise ValueError(
+                "Agent card URL does not match deployed service URL: "
+                f"{advertised_url!r} != {normalized_service_url!r}"
+            )
+        task_id = _send_agent3_message(normalized_service_url)
+        _poll_agent3_task(normalized_service_url, task_id)
         return
     raise ValueError(f"unsupported smoke check type: {smoke_type}")
 

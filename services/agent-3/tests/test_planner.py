@@ -188,6 +188,30 @@ def test_planner_passes_current_time_as_departure_time_for_meal_travel() -> None
     ]
 
 
+def test_planner_defers_restaurant_travel_until_near_meal_window() -> None:
+    request = _build_request(day_end="2026-04-20T15:00:00")
+    request.places[1].estimated_visit_duration_minutes = 130
+    route_client = CapturingRouteClient(10)
+
+    response = PlannerService(
+        route_client=route_client,
+        meal_client=CapturingMealClient(),
+    ).plan_day(request)
+
+    assert [call["departure_time"] for call in route_client.calls] == [
+        datetime.fromisoformat("2026-04-20T11:10:00"),
+        datetime.fromisoformat("2026-04-20T12:00:00"),
+        datetime.fromisoformat("2026-04-20T11:50:00"),
+        datetime.fromisoformat("2026-04-20T13:00:00"),
+    ]
+    travel_to_lunch = response.day_schedule.events[1]
+    assert travel_to_lunch.event_type == EVENT_TYPE_TRAVEL
+    assert travel_to_lunch.start_time == datetime.fromisoformat("2026-04-20T11:50:00")
+    meal = response.day_schedule.events[2]
+    assert meal.event_type == EVENT_TYPE_MEAL
+    assert meal.start_time == datetime.fromisoformat("2026-04-20T12:00:00")
+
+
 def test_planner_uses_fallback_when_route_estimation_fails() -> None:
     request = _build_request(day_end="2026-04-20T12:00:00")
 

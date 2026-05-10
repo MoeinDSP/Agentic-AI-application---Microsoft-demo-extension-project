@@ -53,6 +53,7 @@ def main() -> None:
             manifest,
             deployed_urls=deployed_urls,
             region=args.region,
+            allow_missing_service_url=True,
         )
         secret_bindings = resolve_secret_bindings(manifest)
         _run(
@@ -69,6 +70,27 @@ def main() -> None:
             region=args.region,
         )
         deployed_urls[manifest.service_name] = service_url
+        final_env_vars = resolve_env_vars(
+            manifest,
+            deployed_urls=deployed_urls,
+            region=args.region,
+            service_url=service_url,
+        )
+        if final_env_vars != env_vars:
+            _run(
+                build_run_deploy_command(
+                    manifest,
+                    image_uri=image_uri,
+                    region=args.region,
+                    env_vars=final_env_vars,
+                    secret_bindings=secret_bindings,
+                )
+            )
+            service_url = fetch_service_url(
+                manifest.deploy["cloud_run_service"],
+                region=args.region,
+            )
+            deployed_urls[manifest.service_name] = service_url
         smoke_check_service(
             manifest,
             service_url=service_url,

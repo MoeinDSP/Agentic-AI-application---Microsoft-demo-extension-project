@@ -31,6 +31,8 @@ deploy:
     AGENT3_ENVIRONMENT:
       source: literal
       value: production
+    AGENT3_PUBLIC_BASE_URL:
+      source: service_url
     AGENT3_MCP_BASE_URL:
       source: dependency_url
       service: agent-3-mcp
