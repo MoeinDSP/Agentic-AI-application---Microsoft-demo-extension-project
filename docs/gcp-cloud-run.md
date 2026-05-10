@@ -78,6 +78,8 @@ Create:
 The resulting provider resource string is stored in the GitHub variable
 `GCP_WORKLOAD_IDENTITY_PROVIDER`.
 
+This GitHub deploy WIF path is now implemented and proven in production.
+
 ## GitHub Configuration
 
 ### Variables
@@ -202,6 +204,36 @@ Important rule:
   `roles/iam.serviceAccountUser` on:
   - `GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL`
   - `GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL`
+- in practice, the deployer service account also needed
+  `roles/iam.serviceAccountTokenCreator` on itself for private-service smoke
+  token minting
+- the GitHub WIF principal also needed a token-creator binding on the deployer
+  service account
+- this repo's rollout also required Cloud Build-related permissions in practice,
+  not only idealized Cloud Run deploy permissions:
+  - Cloud Build submit access
+  - Cloud Build staging bucket access
+  - service usage permission
+  - permission to act as the Cloud Build execution service account used by the
+    project
+
+### Runtime service account grants
+
+- `agent-3-runtime` must have `roles/run.invoker` on `agent-3-mcp`
+- `agent-3-mcp-runtime` must have
+  `roles/secretmanager.secretAccessor` on
+  `agent3-mcp-google-maps-api-key`
+- both runtime service accounts must be attachable by the deployer service
+  account via `roles/iam.serviceAccountUser`
+
+### External orchestrator WIF status
+
+- GitHub deploy WIF is complete and proven
+- external orchestrator -> Agent 3 WIF is architecture-ready in the current
+  design
+- treat that external path as complete only after the external identity is
+  configured, granted `roles/run.invoker` on Agent 3, and tested with a real
+  invocation
 
 ## Rollback / Redeploy
 
@@ -210,6 +242,19 @@ Rollback options:
 1. rerun `deploy.yml` for a known good commit
 2. revert the merge on `main` and let CD deploy the reverted state
 3. use Cloud Run revision history for operational rollback if needed
+
+## Manual Recovery / Verification
+
+Post-deploy verification should include:
+
+- checking `agent-3-mcp /health`
+- checking `agent-3 /health`
+- checking `agent-3 /.well-known/agent-card.json`
+- confirming the agent-card `url` matches the deployed Cloud Run URL
+
+If the second-pass Agent 3 redeploy does not leave the correct public URL in the
+agent card, manually update `AGENT3_PUBLIC_BASE_URL` on the deployed service and
+verify the agent card again.
 
 ## Known Behavioral Boundaries
 
@@ -225,3 +270,9 @@ Rollback options:
   Routes
 - local development keeps `AGENT3_MCP_AUTH_MODE=none`; Cloud Run deployment sets
   `AGENT3_MCP_AUTH_MODE=gcp_id_token`
+- the Secret Manager value for `agent3-mcp-google-maps-api-key` must be a real,
+  non-empty key
+- MCP now strips surrounding secret whitespace, so trailing newline artifacts are
+  tolerated, but an empty secret still fails route estimation
+- current production verification also observed route fallback warnings on some
+  hops even when end-to-end meal-window scheduling succeeded

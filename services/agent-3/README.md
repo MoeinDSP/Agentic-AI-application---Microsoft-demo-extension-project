@@ -215,11 +215,30 @@ Production deployment sets:
 - `AGENT3_MCP_AUTH_MODE=gcp_id_token`
 - `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL>` only after Agent 4 is available
 
+Verified production behavior:
+
+- with `AGENT3_AGENT4_BASE_URL` unset, meal-capable requests fail with
+  `agent4_unconfigured`
+- with `AGENT3_AGENT4_BASE_URL` set, deployed meal-window requests complete and
+  return real non-synthetic meal events from external Agent 4
+- no-meal production scheduling requests completed successfully during rollout
+- route-estimation fallback warnings may still appear on some hops even when the
+  overall task completes successfully
+
 Agent 3 does not own or deploy Agent 4. It only consumes an external URL.
 
 For private Cloud Run deployment, Agent 3 does not implement custom inbound auth
 middleware. Cloud Run IAM protects ingress, and Agent 3 uses a Google-signed ID
 token when calling the private MCP service.
+
+## Production Verification Notes
+
+During the verified production rollout:
+
+- a no-meal FastA2A scheduling task completed successfully
+- a meal-window task completed successfully after `AGENT3_AGENT4_BASE_URL` was
+  configured
+- the meal result was non-synthetic and came from the external Agent 4 service
 
 ## Deployment
 
