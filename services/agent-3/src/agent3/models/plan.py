@@ -15,6 +15,7 @@ WARNING_NO_RESTAURANT_CANDIDATE = "no_restaurant_candidate_found"
 WARNING_FALLBACK_TRAVEL = "route_estimation_failed_using_fallback"
 WARNING_MEAL_NOT_INSERTED = "meal_not_inserted"
 WARNING_PLACE_UNSCHEDULED = "place_unscheduled"
+ERROR_AGENT4_UNCONFIGURED = "agent4_unconfigured"
 
 
 class HealthResponse(BaseModel):

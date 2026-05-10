@@ -13,9 +13,14 @@ from agent3.models.agent4 import (
     MealRecommendationResponse,
     RestaurantCandidate,
 )
+from agent3.models.plan import ERROR_AGENT4_UNCONFIGURED
 
 
 class MealRecommendationError(Exception):
+    pass
+
+
+class Agent4ConfigurationError(MealRecommendationError):
     pass
 
 
@@ -216,7 +221,7 @@ class Agent4MealClient:
     def _require_agent4_base_url(self) -> str:
         base_url = self._settings.agent4_base_url.strip()
         if not base_url:
-            raise MealRecommendationError("AGENT3_AGENT4_BASE_URL is not configured")
+            raise Agent4ConfigurationError(ERROR_AGENT4_UNCONFIGURED)
         return base_url
 
 

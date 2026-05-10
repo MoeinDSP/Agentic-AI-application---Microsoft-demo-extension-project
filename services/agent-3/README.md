@@ -4,7 +4,7 @@ Agent 3 is a single-day scheduling service for the trip-planning architecture
 described in the course PDF. It accepts a normalized `DaySchedulingRequest`,
 builds a chronological day schedule, calls the route tool service for travel
 estimates, and calls the real external Agent 4 for restaurant-backed lunch and
-dinner events.
+dinner events when that integration is configured.
 
 The scheduler contract stays stable in this pass, but the integrations now
 target a real external A2A food recommender and a real Google Routes-backed MCP
@@ -81,9 +81,12 @@ Schedule events are chronological and use `event_type`:
 - Dinner is attempted when the day overlaps `19:00-21:00`.
 - Meal duration is fixed at 60 minutes for the assignment MVP.
 - `food_budget_per_day` is split across the meal slots Agent 3 attempts.
-- Agent 4 is called for each inserted lunch or dinner.
-- If Agent 4 is unavailable or returns no candidates, Agent 3 inserts a
-  synthetic meal event and records a warning.
+- Agent 4 is called for each inserted lunch or dinner when
+  `AGENT3_AGENT4_BASE_URL` is configured.
+- If a meal window is due and `AGENT3_AGENT4_BASE_URL` is missing, Agent 3
+  fails the request with `agent4_unconfigured`.
+- If Agent 4 is configured but unavailable or returns no candidates, Agent 3
+  inserts a synthetic meal event and records a warning.
 - If a meal window has not started yet, Agent 3 delays restaurant travel until
   it is actually needed instead of sending the user to the restaurant early.
 - Agent 4 is treated as an external dependency and is configured through
@@ -160,7 +163,8 @@ uv run python -m uvicorn agent3.main:create_app --factory --reload --host 127.0.
 Local startup order:
 
 1. Start `agent-3-mcp`.
-2. Set `AGENT3_AGENT4_BASE_URL` to the external Agent 4 endpoint you want to use.
+2. Optionally set `AGENT3_AGENT4_BASE_URL` to the external Agent 4 endpoint you
+   want to use.
 3. Start `agent-3`.
 
 ## Test
@@ -185,7 +189,7 @@ All settings use the `AGENT3_` prefix.
 | `AGENT3_MCP_BASE_URL` | Yes | local/deploy | Base URL for the Agent 3 MCP route tool service. |
 | `AGENT3_MCP_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Agent 3 to MCP requests. |
 | `AGENT3_MCP_AUTH_MODE` | No | local/deploy | MCP auth mode. Use `none` locally and `gcp_id_token` for private Cloud Run to MCP calls. |
-| `AGENT3_AGENT4_BASE_URL` | Yes for production meals | local/deploy | External Agent 4 base URL. Agent 4 is not implemented in this repo. |
+| `AGENT3_AGENT4_BASE_URL` | Optional for deploy, required for meal-capable runtime requests | local/deploy | External Agent 4 base URL. Agent 4 is not implemented in this repo. Requests that cross lunch or dinner fail with `agent4_unconfigured` when this is unset. |
 | `AGENT3_AGENT4_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Agent 4 calls. |
 | `AGENT3_AGENT4_INVOCATION_MODE` | No | local/deploy | Agent 4 invocation mode. Current production setting is `a2a`. |
 | `AGENT3_AGENT4_POLL_INTERVAL_SECONDS` | No | local/deploy | Poll interval for FastA2A task completion when calling Agent 4. |
@@ -199,7 +203,7 @@ Local startup typically sets:
 - `AGENT3_PUBLIC_BASE_URL=http://127.0.0.1:8080`
 - `AGENT3_MCP_BASE_URL=http://127.0.0.1:8090`
 - `AGENT3_MCP_AUTH_MODE=none`
-- `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL>`
+- `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL>` if you want real meal recommendations
 
 Production deployment sets:
 
@@ -207,7 +211,7 @@ Production deployment sets:
 - `AGENT3_PUBLIC_BASE_URL=<deployed Cloud Run URL>`
 - `AGENT3_MCP_BASE_URL=<deployed agent-3-mcp URL>`
 - `AGENT3_MCP_AUTH_MODE=gcp_id_token`
-- `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL from GitHub variables>`
+- `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL>` only after Agent 4 is available
 
 Agent 3 does not own or deploy Agent 4. It only consumes an external URL.
 

@@ -27,7 +27,11 @@ from agent3.models.plan import (
     TravelInfo,
     VisitEvent,
 )
-from agent3.services.agent4_client import MealRecommendationError, get_agent4_meal_client
+from agent3.services.agent4_client import (
+    Agent4ConfigurationError,
+    MealRecommendationError,
+    get_agent4_meal_client,
+)
 from agent3.services.mcp_client import (
     RouteEstimationError,
     get_mcp_route_client,
@@ -456,6 +460,8 @@ class PlannerService:
 
         try:
             response = self._meal_client.recommend_meal(meal_request)
+        except Agent4ConfigurationError:
+            raise
         except MealRecommendationError:
             return None, f"{WARNING_AGENT4_UNAVAILABLE}:{meal_slot}"
 

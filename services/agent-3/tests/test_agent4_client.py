@@ -7,7 +7,12 @@ from agent3.models.agent4 import (
     AGENT4_INVOCATION_MODE_HTTP,
     MealRecommendationRequest,
 )
-from agent3.services.agent4_client import Agent4MealClient, MealRecommendationError
+from agent3.models.plan import ERROR_AGENT4_UNCONFIGURED
+from agent3.services.agent4_client import (
+    Agent4ConfigurationError,
+    Agent4MealClient,
+    MealRecommendationError,
+)
 
 
 class _MockResponse:
@@ -236,5 +241,5 @@ def test_settings_accept_http_invocation_mode() -> None:
 def test_agent4_client_requires_explicit_base_url() -> None:
     client = Agent4MealClient(Settings(agent4_base_url=""))
 
-    with pytest.raises(MealRecommendationError, match="AGENT3_AGENT4_BASE_URL"):
+    with pytest.raises(Agent4ConfigurationError, match=ERROR_AGENT4_UNCONFIGURED):
         client.recommend_meal(_request())

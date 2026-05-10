@@ -1,8 +1,11 @@
 from datetime import datetime
 
+import pytest
+
 from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
+    ERROR_AGENT4_UNCONFIGURED,
     EVENT_TYPE_MEAL,
     EVENT_TYPE_TRAVEL,
     EVENT_TYPE_VISIT,
@@ -13,7 +16,7 @@ from agent3.models.plan import (
     WARNING_PLACE_UNSCHEDULED,
     DaySchedulingRequest,
 )
-from agent3.services.agent4_client import MealRecommendationError
+from agent3.services.agent4_client import Agent4ConfigurationError, MealRecommendationError
 from agent3.services.planner import PlannerService
 
 
@@ -87,6 +90,12 @@ class FailingMealClient:
     def recommend_meal(self, request: object) -> MealRecommendationResponse:
         _ = request
         raise MealRecommendationError("boom")
+
+
+class UnconfiguredMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        raise Agent4ConfigurationError(ERROR_AGENT4_UNCONFIGURED)
 
 
 def _build_request(
@@ -315,6 +324,22 @@ def test_planner_uses_synthetic_meal_when_agent4_fails() -> None:
     assert meal.synthetic is True
     assert meal.restaurant is None
     assert f"{WARNING_AGENT4_UNAVAILABLE}:lunch" in response.warnings
+
+
+def test_planner_succeeds_without_agent4_when_no_meal_window_is_due() -> None:
+    request = _build_request(day_end="2026-04-20T11:00:00")
+
+    response = PlannerService(meal_client=UnconfiguredMealClient()).plan_day(request)
+
+    assert all(event.event_type != EVENT_TYPE_MEAL for event in response.day_schedule.events)
+    assert response.unscheduled_places
+
+
+def test_planner_fails_when_meal_is_due_and_agent4_is_unconfigured() -> None:
+    request = _build_request(day_end="2026-04-20T15:00:00")
+
+    with pytest.raises(Agent4ConfigurationError, match=ERROR_AGENT4_UNCONFIGURED):
+        PlannerService(meal_client=UnconfiguredMealClient()).plan_day(request)
 
 
 def test_planner_uses_synthetic_meal_when_agent4_returns_no_candidates() -> None:

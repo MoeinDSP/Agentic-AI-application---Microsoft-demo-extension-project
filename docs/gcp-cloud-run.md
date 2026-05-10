@@ -8,8 +8,7 @@ The current repo-owned Cloud Run services are:
 - `agent-3`
 - `agent-3-mcp`
 
-Agent 4 remains external and must be provided through
-`AGENT3_AGENT4_BASE_URL`.
+Agent 4 remains external. Deployment can proceed before it is available.
 
 ## Chosen Defaults
 
@@ -90,7 +89,6 @@ The resulting provider resource string is stored in the GitHub variable
 - `GCP_WORKLOAD_IDENTITY_PROVIDER=<projects/.../workloadIdentityPools/.../providers/...>`
 - `GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL=<agent-3 runtime service account email>`
 - `GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL=<agent-3-mcp runtime service account email>`
-- `AGENT3_AGENT4_BASE_URL=<external Agent 4 base URL>`
 
 ### Secrets
 
@@ -105,6 +103,13 @@ the Google Maps key from Secret Manager, not from GitHub.
 
 Use this only if WIF is not available yet. The intended long-term deploy auth is
 WIF, not a JSON key.
+
+### Optional variables
+
+- `AGENT3_AGENT4_BASE_URL=<external Agent 4 base URL>`
+
+If this variable is unset, deployment still succeeds. Agent 3 only requires it
+for runtime requests that actually need lunch or dinner recommendations.
 
 ### Recommended runtime service account naming
 
@@ -126,7 +131,7 @@ For the current services:
 2. `agent-3` deploys second
 3. `agent-3` receives the resolved Cloud Run URL of `agent-3-mcp`
 4. `agent-3-mcp` receives the Google Maps key from Secret Manager
-5. `agent-3` receives `AGENT3_AGENT4_BASE_URL` from GitHub variables
+5. `agent-3` receives `AGENT3_AGENT4_BASE_URL` only when that variable is set
 6. both services are deployed with their configured runtime service accounts
 7. `agent-3` is redeployed with `AGENT3_PUBLIC_BASE_URL` set to its real Cloud
    Run URL so its FastA2A agent card advertises the correct endpoint
@@ -209,7 +214,10 @@ Rollback options:
 ## Known Behavioral Boundaries
 
 - Agent 3 deploy smoke does not exercise Agent 4
-- Agent 3 can still fall back to synthetic meals at runtime if Agent 4 is down
+- Agent 3 fails meal-capable requests with `agent4_unconfigured` if
+  `AGENT3_AGENT4_BASE_URL` is unset
+- Agent 3 can still fall back to synthetic meals at runtime if Agent 4 is
+  configured but unavailable
 - Agent 3 MCP `place-details` remains placeholder
 - meal travel is deferred until near the meal window instead of sending the user
   to the restaurant too early

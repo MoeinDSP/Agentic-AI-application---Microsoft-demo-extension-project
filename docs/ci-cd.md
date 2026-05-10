@@ -94,11 +94,14 @@ If both change in one merge, `agent-3-mcp` deploys first.
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL`
 - `GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL`
-- `AGENT3_AGENT4_BASE_URL`
 
 ### Repository or environment secrets
 
 - `AGENT3_MCP_GOOGLE_MAPS_API_KEY`
+
+### Optional repository or environment variables
+
+- `AGENT3_AGENT4_BASE_URL`
 
 ### Optional fallback secret
 
@@ -114,9 +117,10 @@ fallback exists only to unblock deployment before WIF is configured.
   - owned by Google Secret Manager in production
   - also stored as a GitHub Actions secret only for `live-smoke.yml`
 - `AGENT3_AGENT4_BASE_URL`
-  - deployment-time config for `agent-3`
+  - external runtime integration config for `agent-3`
   - owned by GitHub variables
-  - required because Agent 4 is external and is not deployed from this repo
+  - optional for deployment
+  - required only for requests that actually cross lunch or dinner windows
 
 ## Post-Deploy Guarantees
 

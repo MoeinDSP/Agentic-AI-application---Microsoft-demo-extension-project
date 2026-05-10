@@ -17,6 +17,7 @@ from fasta2a.storage import InMemoryStorage
 
 from agent3.core.config import Settings, get_settings
 from agent3.models.plan import DaySchedulingRequest, DaySchedulingResult
+from agent3.services.agent4_client import Agent4ConfigurationError
 from agent3.services.planner import PlannerService, get_planner_service
 
 Context = list[Message]
@@ -40,7 +41,20 @@ class PlannerA2AWorker(Worker[Context]):
         await self.storage.update_task(task["id"], state="working")
 
         request = self._extract_request(params["message"])
-        result = self._planner.build_plan(request)
+        try:
+            result = self._planner.build_plan(request)
+        except Agent4ConfigurationError as exc:
+            failure_message = self._build_failure_message(str(exc))
+            context = await self.storage.load_context(task["context_id"]) or []
+            context.extend(task.get("history", []))
+            context.append(failure_message)
+            await self.storage.update_context(task["context_id"], context)
+            await self.storage.update_task(
+                task["id"],
+                state="failed",
+                new_messages=[failure_message],
+            )
+            return
         artifacts = self.build_artifacts(result)
         completion_message = self._build_completion_message(result)
 
@@ -103,6 +117,19 @@ class PlannerA2AWorker(Worker[Context]):
                         f"Generated a schedule with {scheduled_event_count} events and "
                         f"{len(result.unscheduled_places)} unscheduled places."
                     ),
+                )
+            ],
+        )
+
+    def _build_failure_message(self, reason: str) -> Message:
+        return Message(
+            role="agent",
+            kind="message",
+            message_id=str(uuid.uuid4()),
+            parts=[
+                TextPart(
+                    kind="text",
+                    text=reason,
                 )
             ],
         )

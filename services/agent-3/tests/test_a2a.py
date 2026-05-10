@@ -5,6 +5,8 @@ from starlette.testclient import TestClient
 from agent3.main import create_app
 from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
+from agent3.models.plan import ERROR_AGENT4_UNCONFIGURED
+from agent3.services.agent4_client import Agent4ConfigurationError
 from agent3.services.planner import PlannerService
 
 
@@ -41,6 +43,12 @@ class FixedMealClient:
         )
 
 
+class UnconfiguredMealClient:
+    def recommend_meal(self, request: object) -> MealRecommendationResponse:
+        _ = request
+        raise Agent4ConfigurationError(ERROR_AGENT4_UNCONFIGURED)
+
+
 def _plan_payload() -> dict[str, object]:
     return {
         "day_start": "2026-04-20T09:00:00",
@@ -67,12 +75,12 @@ def _plan_payload() -> dict[str, object]:
     }
 
 
-def _build_client() -> TestClient:
-    planner = PlannerService(
+def _build_client(planner: PlannerService | None = None) -> TestClient:
+    resolved_planner = planner or PlannerService(
         route_client=FixedRouteClient(0),
         meal_client=FixedMealClient(),
     )
-    return TestClient(create_app(planner=planner))
+    return TestClient(create_app(planner=resolved_planner))
 
 
 def _send_message(client: TestClient, payload: dict[str, object]) -> dict[str, object]:
@@ -178,6 +186,22 @@ def test_message_send_marks_task_failed_for_invalid_payload() -> None:
         get_payload = _poll_task(client, task_id)
 
     assert get_payload["result"]["status"]["state"] == "failed"
+
+
+def test_message_send_marks_task_failed_when_agent4_is_unconfigured() -> None:
+    planner = PlannerService(
+        route_client=FixedRouteClient(0),
+        meal_client=UnconfiguredMealClient(),
+    )
+
+    with _build_client(planner) as client:
+        send_payload = _send_message(client, _plan_payload())
+        task_id = send_payload["result"]["id"]
+        get_payload = _poll_task(client, task_id)
+
+    assert send_payload["result"]["status"]["state"] == "submitted"
+    assert get_payload["result"]["status"]["state"] == "failed"
+    assert ERROR_AGENT4_UNCONFIGURED in str(get_payload)
 
 
 def test_message_send_supports_bicycling_transport_mode() -> None:

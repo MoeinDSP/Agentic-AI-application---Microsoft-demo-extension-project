@@ -39,9 +39,6 @@ deploy:
     AGENT3_MCP_BASE_URL:
       source: dependency_url
       service: agent-3-mcp
-    AGENT3_AGENT4_BASE_URL:
-      source: github_var
-      name: AGENT3_AGENT4_BASE_URL
     AGENT3_AGENT4_INVOCATION_MODE:
       source: literal
       value: a2a
