@@ -298,17 +298,26 @@ def _cloud_run_auth_headers(service_url: str) -> dict[str, str]:
 
 
 def _print_identity_token(audience: str) -> str:
+    command = [
+        "gcloud",
+        "auth",
+        "print-identity-token",
+        f"--audiences={audience}",
+    ]
+    impersonated_service_account = os.environ.get("GCP_SERVICE_ACCOUNT_EMAIL", "").strip()
+    if impersonated_service_account:
+        command.append(
+            f"--impersonate-service-account={impersonated_service_account}"
+        )
     completed = subprocess.run(
-        [
-            "gcloud",
-            "auth",
-            "print-identity-token",
-            f"--audiences={audience}",
-        ],
-        check=True,
+        command,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if completed.returncode != 0:
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
+        raise RuntimeError(f"Failed to mint Cloud Run identity token: {stderr}")
     token = completed.stdout.strip()
     if not token:
         raise ValueError("gcloud auth print-identity-token returned an empty token")

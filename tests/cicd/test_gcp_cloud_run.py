@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from tools.cicd.gcp_cloud_run import (
@@ -9,6 +10,7 @@ from tools.cicd.gcp_cloud_run import (
     build_run_deploy_command,
     build_submit_command,
     extract_build_id,
+    _print_identity_token,
     resolve_runtime_service_account,
     resolve_env_vars,
     resolve_secret_bindings,
@@ -193,3 +195,33 @@ class GcpCloudRunTests(unittest.TestCase):
 
         assert calls[0][2] == {"Authorization": "Bearer mock-token"}
         assert calls[1][2] == {"Authorization": "Bearer mock-token"}
+
+    def test_print_identity_token_uses_impersonation_when_configured(self) -> None:
+        os.environ["GCP_SERVICE_ACCOUNT_EMAIL"] = "github-deployer@example.iam.gserviceaccount.com"
+        self.addCleanup(os.environ.pop, "GCP_SERVICE_ACCOUNT_EMAIL", None)
+
+        with patch(
+            "tools.cicd.gcp_cloud_run.subprocess.run",
+            return_value=CompletedProcess(args=[], returncode=0, stdout="token\n", stderr=""),
+        ) as mock_run:
+            token = _print_identity_token("https://agent-3-mcp.example.com")
+
+        self.assertEqual(token, "token")
+        command = mock_run.call_args.args[0]
+        self.assertIn(
+            "--impersonate-service-account=github-deployer@example.iam.gserviceaccount.com",
+            command,
+        )
+
+    def test_print_identity_token_surfaces_gcloud_error_output(self) -> None:
+        with patch(
+            "tools.cicd.gcp_cloud_run.subprocess.run",
+            return_value=CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr="permission denied",
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "permission denied"):
+                _print_identity_token("https://agent-3-mcp.example.com")
