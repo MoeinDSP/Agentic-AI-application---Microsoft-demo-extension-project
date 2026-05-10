@@ -1,3 +1,5 @@
+import json
+import logging
 from datetime import datetime
 
 import httpx
@@ -18,11 +20,18 @@ class _MockResponse:
             raise httpx.HTTPStatusError(
                 "boom",
                 request=httpx.Request("POST", "http://test"),
-                response=httpx.Response(self.status_code),
+                response=httpx.Response(
+                    self.status_code,
+                    text=json.dumps(self._payload),
+                ),
             )
 
     def json(self) -> dict[str, object]:
         return self._payload
+
+    @property
+    def text(self) -> str:
+        return json.dumps(self._payload)
 
 
 class _MockClient:
@@ -234,3 +243,30 @@ def test_route_estimate_raises_on_invalid_response(monkeypatch: pytest.MonkeyPat
                 mode="bicycling",
             )
         )
+
+
+def test_route_estimate_logs_google_error_body_on_http_status_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mock_client = _MockClient(
+        response=_MockResponse(
+            {"error": {"message": "bad route request"}},
+            status_code=400,
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: mock_client)
+    service = ToolService(Settings(google_maps_api_key="test-key"))
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(httpx.HTTPStatusError):
+            service.estimate_route(
+                RouteEstimateRequest(
+                    origin=Coordinates(lat=41.9028, lng=12.4964),
+                    destination=Coordinates(lat=41.8902, lng=12.4922),
+                    mode="walking",
+                )
+            )
+
+    assert "Google Routes request failed with status 400" in caplog.text
+    assert "bad route request" in caplog.text

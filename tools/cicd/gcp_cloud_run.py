@@ -161,7 +161,6 @@ def smoke_check_service(
             "origin": {"lat": 41.8902, "lng": 12.4922},
             "destination": {"lat": 41.8986, "lng": 12.4769},
             "mode": "walking",
-            "departure_time": "2026-05-10T09:00:00Z",
         }
         _http_request(
             "POST",

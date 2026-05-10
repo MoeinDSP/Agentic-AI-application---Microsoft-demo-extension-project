@@ -168,7 +168,7 @@ class GcpCloudRunTests(unittest.TestCase):
 
     def test_smoke_check_service_adds_auth_header_for_private_cloud_run(self) -> None:
         manifest = load_manifests()["agent-3-mcp"]
-        calls: list[tuple[str, str, dict[str, str] | None]] = []
+        calls: list[tuple[str, str, dict[str, object] | None, dict[str, str] | None]] = []
 
         def _capture_request(
             method: str,
@@ -177,8 +177,7 @@ class GcpCloudRunTests(unittest.TestCase):
             *,
             headers: dict[str, str] | None = None,
         ) -> dict[str, object]:
-            _ = payload
-            calls.append((method, url, headers))
+            calls.append((method, url, payload, headers))
             return {}
 
         with patch(
@@ -193,8 +192,13 @@ class GcpCloudRunTests(unittest.TestCase):
                 service_url="https://agent-3-mcp.example.com",
             )
 
-        assert calls[0][2] == {"Authorization": "Bearer mock-token"}
-        assert calls[1][2] == {"Authorization": "Bearer mock-token"}
+        assert calls[0][3] == {"Authorization": "Bearer mock-token"}
+        assert calls[1][3] == {"Authorization": "Bearer mock-token"}
+        assert calls[1][2] == {
+            "origin": {"lat": 41.8902, "lng": 12.4922},
+            "destination": {"lat": 41.8986, "lng": 12.4769},
+            "mode": "walking",
+        }
 
     def test_print_identity_token_uses_impersonation_when_configured(self) -> None:
         os.environ["GCP_SERVICE_ACCOUNT_EMAIL"] = "github-deployer@example.iam.gserviceaccount.com"
