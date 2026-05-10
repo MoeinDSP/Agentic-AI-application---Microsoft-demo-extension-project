@@ -231,3 +231,10 @@ def test_settings_accept_http_invocation_mode() -> None:
     settings = Settings(agent4_invocation_mode=AGENT4_INVOCATION_MODE_HTTP)
 
     assert settings.agent4_invocation_mode == AGENT4_INVOCATION_MODE_HTTP
+
+
+def test_agent4_client_requires_explicit_base_url() -> None:
+    client = Agent4MealClient(Settings(agent4_base_url=""))
+
+    with pytest.raises(MealRecommendationError, match="AGENT3_AGENT4_BASE_URL"):
+        client.recommend_meal(_request())

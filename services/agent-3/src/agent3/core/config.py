@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     public_base_url: str = Field(default="http://127.0.0.1:8080")
     mcp_base_url: str = Field(default="http://127.0.0.1:8090")
     mcp_timeout_seconds: float = Field(default=2.0)
-    agent4_base_url: str = Field(default="http://65.21.48.155:8004")
+    agent4_base_url: str = Field(default="")
     agent4_timeout_seconds: float = Field(default=2.0)
     agent4_invocation_mode: str = Field(default="a2a")
     agent4_poll_interval_seconds: float = Field(default=1.0, gt=0)

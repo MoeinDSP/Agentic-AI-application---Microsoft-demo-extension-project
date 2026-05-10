@@ -84,7 +84,8 @@ Schedule events are chronological and use `event_type`:
 - Agent 4 is called for each inserted lunch or dinner.
 - If Agent 4 is unavailable or returns no candidates, Agent 3 inserts a
   synthetic meal event and records a warning.
-- The production-target Agent 4 endpoint is `http://65.21.48.155:8004`.
+- Agent 4 is treated as an external dependency and is configured through
+  `AGENT3_AGENT4_BASE_URL`.
 
 ## Example
 
@@ -157,7 +158,7 @@ uv run python -m uvicorn agent3.main:create_app --factory --reload --host 127.0.
 Local startup order:
 
 1. Start `agent-3-mcp`.
-2. Ensure the external Agent 4 endpoint is reachable.
+2. Set `AGENT3_AGENT4_BASE_URL` to the external Agent 4 endpoint you want to use.
 3. Start `agent-3`.
 
 ## Test
@@ -170,7 +171,8 @@ uv run pytest
 ## Environment Variables
 
 - `AGENT3_MCP_BASE_URL`: route tool base URL.
-- `AGENT3_AGENT4_BASE_URL`: Agent 4 base URL.
+- `AGENT3_AGENT4_BASE_URL`: external Agent 4 base URL. Required for
+  restaurant-backed meal recommendations.
 - `AGENT3_AGENT4_INVOCATION_MODE`: `http` or `a2a`.
 - `AGENT3_AGENT4_POLL_INTERVAL_SECONDS`: FastA2A poll interval.
 - `AGENT3_AGENT4_MAX_WAIT_SECONDS`: FastA2A max task wait.

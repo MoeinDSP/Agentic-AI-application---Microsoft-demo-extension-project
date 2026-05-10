@@ -28,6 +28,7 @@ class Agent4MealClient:
         self,
         request: MealRecommendationRequest,
     ) -> MealRecommendationResponse:
+        self._require_agent4_base_url()
         if self._settings.agent4_invocation_mode == AGENT4_INVOCATION_MODE_A2A:
             return self._recommend_meal_via_a2a(request)
         return self._recommend_meal_via_http(request)
@@ -211,6 +212,12 @@ class Agent4MealClient:
                 "invocation_mode": self._settings.agent4_invocation_mode,
             },
         )
+
+    def _require_agent4_base_url(self) -> str:
+        base_url = self._settings.agent4_base_url.strip()
+        if not base_url:
+            raise MealRecommendationError("AGENT3_AGENT4_BASE_URL is not configured")
+        return base_url
 
 
 @lru_cache(maxsize=1)
