@@ -91,6 +91,8 @@ Schedule events are chronological and use `event_type`:
   it is actually needed instead of sending the user to the restaurant early.
 - Agent 4 is treated as an external dependency and is configured through
   `AGENT3_AGENT4_BASE_URL`.
+- Agent 3 accepts A2A restaurant artifacts under either `restaurants` or
+  `restaurantcandidates` for external Agent 4 compatibility.
 
 ## Example
 

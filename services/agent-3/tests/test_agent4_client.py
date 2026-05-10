@@ -177,6 +177,77 @@ def test_agent4_client_supports_real_a2a_mode(monkeypatch: pytest.MonkeyPatch) -
     assert response.candidates[0].summary == "Via della Posta Vecchia, 4, Roma"
 
 
+def test_agent4_client_supports_restaurantcandidates_a2a_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_client = _MockClient(
+        responses=[
+            _MockResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "send-1",
+                    "result": {"id": "task-123"},
+                }
+            ),
+            _MockResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "poll-1",
+                    "result": {
+                        "status": {"state": "completed"},
+                        "artifacts": [
+                            {
+                                "artifactId": "result-1",
+                                "parts": [
+                                    {
+                                        "kind": "data",
+                                        "data": {
+                                            "restaurantcandidates": [
+                                                {
+                                                    "id": "place-2",
+                                                    "name": "Campo Lunch Spot",
+                                                    "location": {
+                                                        "latitude": 41.8951,
+                                                        "longitude": 12.4727,
+                                                        "address": "Piazza Campo de' Fiori, Roma",
+                                                    },
+                                                    "price_level": None,
+                                                    "cuisines": None,
+                                                    "rating": None,
+                                                    "summary": None,
+                                                }
+                                            ]
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                }
+            ),
+        ]
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: mock_client)
+    client = Agent4MealClient(
+        Settings(
+            agent4_invocation_mode=AGENT4_INVOCATION_MODE_A2A,
+            agent4_base_url="http://test-agent4",
+            agent4_poll_interval_seconds=0.01,
+            agent4_max_wait_seconds=1,
+        )
+    )
+
+    response = client.recommend_meal(_request())
+
+    assert response.candidates[0].id == "place-2"
+    assert response.candidates[0].location.lat == 41.8951
+    assert response.candidates[0].location.lng == 12.4727
+    assert response.candidates[0].price_level == 1
+    assert response.candidates[0].cuisines == ["unknown"]
+    assert response.candidates[0].rating == 0
+    assert response.candidates[0].summary == "Piazza Campo de' Fiori, Roma"
+
+
 def test_agent4_client_raises_on_a2a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         httpx,

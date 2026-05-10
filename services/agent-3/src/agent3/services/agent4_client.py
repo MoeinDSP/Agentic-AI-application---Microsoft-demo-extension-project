@@ -177,6 +177,8 @@ class Agent4MealClient:
                 if not isinstance(data, dict):
                     continue
                 restaurants = data.get("restaurants")
+                if not isinstance(restaurants, list):
+                    restaurants = data.get("restaurantcandidates")
                 if isinstance(restaurants, list):
                     return [item for item in restaurants if isinstance(item, dict)]
         return []
