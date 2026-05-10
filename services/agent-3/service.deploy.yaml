@@ -1,0 +1,57 @@
+service_name: agent-3
+ownership: repo-deployed
+deploy_enabled: true
+validate_enabled: true
+backend: gcp-cloud-run
+build_context: services/agent-3
+dockerfile: services/agent-3/Dockerfile
+runtime_port: 8080
+healthcheck: /health
+smoke_check_type: fasta2a-day-schedule
+depends_on:
+  - agent-3-mcp
+ci:
+  enabled: true
+  working_directory: services/agent-3
+  install_command: uv sync --group dev
+  lint_command: uv run ruff check .
+  test_command: uv run pytest
+  live_smoke_command: uv run pytest tests/test_live_agent4_external.py -q
+  live_smoke_env:
+    AGENT3_AGENT4_BASE_URL:
+      source: github_var
+      name: AGENT3_AGENT4_BASE_URL
+    AGENT3_AGENT4_INVOCATION_MODE:
+      source: literal
+      value: a2a
+deploy:
+  cloud_run_service: agent-3
+  allow_unauthenticated: false
+  runtime_service_account:
+    source: github_var
+    name: GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL
+  required_env:
+    AGENT3_ENVIRONMENT:
+      source: literal
+      value: production
+    AGENT3_PUBLIC_BASE_URL:
+      source: service_url
+    AGENT3_MCP_BASE_URL:
+      source: dependency_url
+      service: agent-3-mcp
+    AGENT3_AGENT4_INVOCATION_MODE:
+      source: literal
+      value: a2a
+    AGENT3_MCP_AUTH_MODE:
+      source: literal
+      value: gcp_id_token
+    AGENT3_AGENT4_POLL_INTERVAL_SECONDS:
+      source: literal
+      value: "1.0"
+    AGENT3_AGENT4_MAX_WAIT_SECONDS:
+      source: literal
+      value: "15.0"
+    AGENT3_FALLBACK_TRAVEL_MINUTES:
+      source: literal
+      value: "10"
+  required_secrets: {}

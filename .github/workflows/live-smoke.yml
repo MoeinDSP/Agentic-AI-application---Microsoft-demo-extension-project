@@ -1,0 +1,61 @@
+name: Live Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      live_smoke_matrix: ${{ steps.discover.outputs.live_smoke_matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI/CD helper dependencies
+        run: python -m pip install pyyaml
+
+      - name: Load live smoke manifest matrix
+        id: discover
+        run: python .github/scripts/discover_services.py --event-name push --head-sha HEAD
+
+  live-smoke:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.discover.outputs.live_smoke_matrix) }}
+
+    env:
+      AGENT3_AGENT4_BASE_URL: ${{ vars.AGENT3_AGENT4_BASE_URL }}
+      AGENT3_MCP_GOOGLE_MAPS_API_KEY: ${{ secrets.AGENT3_MCP_GOOGLE_MAPS_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install helper dependencies
+        run: python -m pip install pyyaml
+
+      - name: Install service dependencies
+        working-directory: ${{ matrix.service.working_directory }}
+        run: ${{ matrix.service.install_command }}
+
+      - name: Run live smoke
+        run: python .github/scripts/run_live_smoke.py --service "${{ matrix.service.service_name }}"

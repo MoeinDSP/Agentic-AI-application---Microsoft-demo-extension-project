@@ -1,0 +1,118 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/deploy.yml"
+      - "services/**"
+      - "tools/cicd/**"
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      gcp_deploy_services: ${{ steps.discover.outputs.gcp_deploy_services }}
+      has_gcp_deploy_services: ${{ steps.discover.outputs.has_gcp_deploy_services }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI/CD helper dependencies
+        run: python -m pip install pyyaml
+
+      - name: Discover deployable services
+        id: discover
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          BASE_SHA="$PUSH_BASE_SHA"
+          if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            BASE_SHA=""
+          fi
+          python .github/scripts/discover_services.py \
+            --event-name "$EVENT_NAME" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$PUSH_HEAD_SHA"
+
+  deploy-gcp-cloud-run:
+    needs: discover
+    if: ${{ needs.discover.outputs.has_gcp_deploy_services == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'cloud-computing-course-495606' }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+      GCP_ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.GCP_ARTIFACT_REGISTRY_REPOSITORY || 'agent-services' }}
+      GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+      GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL }}
+      GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL }}
+      AGENT3_AGENT4_BASE_URL: ${{ vars.AGENT3_AGENT4_BASE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI/CD helper dependencies
+        run: python -m pip install pyyaml
+
+      - name: Validate GCP authentication inputs
+        run: |
+          if [ -z "$GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL" ] || [ -z "$GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL" ]; then
+            echo "Configure both runtime service account variables for private Cloud Run deployment." >&2
+            exit 1
+          fi
+          if [ -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$GCP_SERVICE_ACCOUNT_EMAIL" ]; then
+            exit 0
+          fi
+          if [ -n "$GCP_CREDENTIALS_JSON" ]; then
+            exit 0
+          fi
+          echo "Configure either Workload Identity Federation or GCP_CREDENTIALS_JSON for deployment." >&2
+          exit 1
+
+      - name: Authenticate to Google Cloud with Workload Identity Federation
+        if: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && env.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Authenticate to Google Cloud with credentials JSON
+        if: ${{ !(env.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && env.GCP_SERVICE_ACCOUNT_EMAIL != '') }}
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Deploy changed GCP services
+        run: |
+          python .github/scripts/deploy_gcp_cloud_run.py \
+            --services "${{ join(fromJson(needs.discover.outputs.gcp_deploy_services), ',') }}" \
+            --project-id "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --repository "$GCP_ARTIFACT_REGISTRY_REPOSITORY" \
+            --tag "${GITHUB_SHA::12}"

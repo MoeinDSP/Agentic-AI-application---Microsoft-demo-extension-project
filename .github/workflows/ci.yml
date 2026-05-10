@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/**"
+      - "services/**"
+      - "tests/cicd/**"
+      - "tools/cicd/**"
+  pull_request:
+    paths:
+      - ".github/scripts/**"
+      - ".github/workflows/**"
+      - "services/**"
+      - "tests/cicd/**"
+      - "tools/cicd/**"
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      ci_matrix: ${{ steps.discover.outputs.ci_matrix }}
+      has_ci_services: ${{ steps.discover.outputs.has_ci_services }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI/CD helper dependencies
+        run: python -m pip install pyyaml
+
+      - name: Discover changed services
+        id: discover
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE_SHA="$PR_BASE_SHA"
+            HEAD_SHA="$PR_HEAD_SHA"
+          else
+            BASE_SHA="$PUSH_BASE_SHA"
+            HEAD_SHA="$PUSH_HEAD_SHA"
+            if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+              BASE_SHA=""
+            fi
+          fi
+          python .github/scripts/discover_services.py \
+            --event-name "$EVENT_NAME" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
+
+  validate-cicd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI/CD test dependencies
+        run: python -m pip install pytest pyyaml
+
+      - name: Run CI/CD tests
+        run: python -m pytest tests/cicd -q
+
+  validate-services:
+    needs:
+      - discover
+      - validate-cicd
+    if: ${{ needs.discover.outputs.has_ci_services == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.discover.outputs.ci_matrix) }}
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.service.working_directory }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: ${{ matrix.service.install_command }}
+
+      - name: Lint
+        run: ${{ matrix.service.lint_command }}
+
+      - name: Test
+        run: ${{ matrix.service.test_command }}
