@@ -107,7 +107,14 @@ def main() -> None:
 
 
 def _run(command: list[str]) -> str:
-    completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    try:
+        completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        if exc.stdout:
+            print(exc.stdout, end="")
+        if exc.stderr:
+            print(exc.stderr, end="", file=sys.stderr)
+        raise
     if completed.stdout:
         print(completed.stdout, end="")
     if completed.stderr:
