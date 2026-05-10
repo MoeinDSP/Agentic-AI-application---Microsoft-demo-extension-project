@@ -77,6 +77,12 @@ Behavior:
 3. Deploy them in dependency order
 4. Run post-deploy smoke checks
 
+Changes to shared deployment infrastructure under `.github/scripts/`,
+`.github/workflows/`, `tools/cicd/`, or `tests/cicd/` intentionally trigger
+deployment of all repo-deployed services on the affected backend. This ensures
+deploy-system changes are exercised against real services instead of requiring
+fake no-op edits under `services/`.
+
 Current dependency rule:
 
 - `agent-3` depends on `agent-3-mcp`
