@@ -8,6 +8,8 @@ from agent3.models.agent4 import (
 )
 from agent3.models.plan import DEFAULT_TRANSPORT_MODE, SUPPORTED_TRANSPORT_MODES
 
+SUPPORTED_MCP_AUTH_MODES = {"none", "gcp_id_token"}
+
 
 class Settings(BaseSettings):
     app_name: str = Field(default="agent-3")
@@ -18,6 +20,7 @@ class Settings(BaseSettings):
     public_base_url: str = Field(default="http://127.0.0.1:8080")
     mcp_base_url: str = Field(default="http://127.0.0.1:8090")
     mcp_timeout_seconds: float = Field(default=2.0)
+    mcp_auth_mode: str = Field(default="none")
     agent4_base_url: str = Field(default="")
     agent4_timeout_seconds: float = Field(default=2.0)
     agent4_invocation_mode: str = Field(default="a2a")
@@ -36,6 +39,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"agent4_invocation_mode must be one of: {supported_modes}"
             )
+        return normalized
+
+    @field_validator("mcp_auth_mode")
+    @classmethod
+    def validate_mcp_auth_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_MCP_AUTH_MODES:
+            supported_modes = ", ".join(sorted(SUPPORTED_MCP_AUTH_MODES))
+            raise ValueError(f"mcp_auth_mode must be one of: {supported_modes}")
         return normalized
 
     @field_validator("default_transport_mode")

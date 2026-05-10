@@ -58,6 +58,10 @@ Production deployment sets:
 - `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS=5.0`
 - `AGENT3_MCP_GOOGLE_MAPS_API_KEY=<Secret Manager injected secret>`
 
+For private Cloud Run deployment, MCP relies on Cloud Run IAM for ingress
+protection. Agent 3 must call it with a Google-signed ID token and a runtime
+service account that has `roles/run.invoker` on the MCP service.
+
 ## Run
 
 ```bash

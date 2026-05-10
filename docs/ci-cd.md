@@ -92,6 +92,8 @@ If both change in one merge, `agent-3-mcp` deploys first.
 - `GCP_ARTIFACT_REGISTRY_REPOSITORY`
 - `GCP_SERVICE_ACCOUNT_EMAIL`
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL`
+- `GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL`
 - `AGENT3_AGENT4_BASE_URL`
 
 ### Repository or environment secrets
@@ -155,8 +157,11 @@ production URL instead of a local default.
 
 ## Current Security State
 
-The current manifests still deploy both services with
-`allow_unauthenticated: true`.
+The current target security model is:
 
-That is a temporary public-first deployment mode. Runtime auth hardening is a
-separate follow-up and is not part of the current deploy gate.
+- GitHub Actions authenticates to GCP with WIF for deployment
+- `agent-3` and `agent-3-mcp` are deployed as authenticated Cloud Run services
+- external callers authenticate to Agent 3 through Cloud Run IAM
+- Agent 3 authenticates to MCP with a Google-signed ID token
+
+App-level custom auth middleware is intentionally not part of this design.

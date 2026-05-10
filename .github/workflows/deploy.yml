@@ -60,6 +60,8 @@ jobs:
       GCP_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
       GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+      GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL }}
+      GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL: ${{ vars.GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL }}
       AGENT3_AGENT4_BASE_URL: ${{ vars.AGENT3_AGENT4_BASE_URL }}
     steps:
       - name: Checkout repository
@@ -75,6 +77,10 @@ jobs:
 
       - name: Validate GCP authentication inputs
         run: |
+          if [ -z "$GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL" ] || [ -z "$GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL" ]; then
+            echo "Configure both runtime service account variables for private Cloud Run deployment." >&2
+            exit 1
+          fi
           if [ -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$GCP_SERVICE_ACCOUNT_EMAIL" ]; then
             exit 0
           fi

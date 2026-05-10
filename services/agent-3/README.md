@@ -184,6 +184,7 @@ All settings use the `AGENT3_` prefix.
 | `AGENT3_PUBLIC_BASE_URL` | Yes in deploy, no locally | local/deploy | Public URL advertised in the FastA2A agent card. Cloud Run deployment injects the real service URL automatically. |
 | `AGENT3_MCP_BASE_URL` | Yes | local/deploy | Base URL for the Agent 3 MCP route tool service. |
 | `AGENT3_MCP_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Agent 3 to MCP requests. |
+| `AGENT3_MCP_AUTH_MODE` | No | local/deploy | MCP auth mode. Use `none` locally and `gcp_id_token` for private Cloud Run to MCP calls. |
 | `AGENT3_AGENT4_BASE_URL` | Yes for production meals | local/deploy | External Agent 4 base URL. Agent 4 is not implemented in this repo. |
 | `AGENT3_AGENT4_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Agent 4 calls. |
 | `AGENT3_AGENT4_INVOCATION_MODE` | No | local/deploy | Agent 4 invocation mode. Current production setting is `a2a`. |
@@ -197,6 +198,7 @@ Local startup typically sets:
 
 - `AGENT3_PUBLIC_BASE_URL=http://127.0.0.1:8080`
 - `AGENT3_MCP_BASE_URL=http://127.0.0.1:8090`
+- `AGENT3_MCP_AUTH_MODE=none`
 - `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL>`
 
 Production deployment sets:
@@ -204,9 +206,14 @@ Production deployment sets:
 - `AGENT3_ENVIRONMENT=production`
 - `AGENT3_PUBLIC_BASE_URL=<deployed Cloud Run URL>`
 - `AGENT3_MCP_BASE_URL=<deployed agent-3-mcp URL>`
+- `AGENT3_MCP_AUTH_MODE=gcp_id_token`
 - `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL from GitHub variables>`
 
 Agent 3 does not own or deploy Agent 4. It only consumes an external URL.
+
+For private Cloud Run deployment, Agent 3 does not implement custom inbound auth
+middleware. Cloud Run IAM protects ingress, and Agent 3 uses a Google-signed ID
+token when calling the private MCP service.
 
 ## Deployment
 

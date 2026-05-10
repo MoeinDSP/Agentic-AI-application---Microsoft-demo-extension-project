@@ -13,6 +13,14 @@ class MetadataTests(unittest.TestCase):
         self.assertIn("agent-3-mcp", manifests)
         self.assertEqual(manifests["agent-3"].ownership, "repo-deployed")
         self.assertEqual(manifests["agent-3-mcp"].backend, "gcp-cloud-run")
+        self.assertEqual(
+            manifests["agent-3"].deploy["runtime_service_account"]["name"],
+            "GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL",
+        )
+        self.assertEqual(
+            manifests["agent-3-mcp"].deploy["runtime_service_account"]["name"],
+            "GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL",
+        )
 
     def test_select_ci_services_for_service_change(self) -> None:
         manifests = load_manifests()

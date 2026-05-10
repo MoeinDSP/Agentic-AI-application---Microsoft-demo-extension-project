@@ -72,6 +72,19 @@ def resolve_secret_bindings(manifest: ServiceManifest) -> dict[str, str]:
     return bindings
 
 
+def resolve_runtime_service_account(manifest: ServiceManifest) -> str | None:
+    definition = manifest.deploy.get("runtime_service_account")
+    if not definition:
+        return None
+    source = definition["source"]
+    if source != "github_var":
+        raise ValueError(f"unsupported runtime service account source: {source}")
+    value = os.environ.get(definition["name"], "").strip()
+    if not value:
+        raise ValueError(f"missing GitHub variable: {definition['name']}")
+    return value
+
+
 def build_run_deploy_command(
     manifest: ServiceManifest,
     *,
@@ -79,6 +92,7 @@ def build_run_deploy_command(
     region: str,
     env_vars: dict[str, str],
     secret_bindings: dict[str, str],
+    runtime_service_account: str | None = None,
 ) -> list[str]:
     command = [
         "gcloud",
@@ -97,6 +111,10 @@ def build_run_deploy_command(
     ]
     if manifest.deploy.get("allow_unauthenticated", False):
         command.append("--allow-unauthenticated")
+    else:
+        command.append("--no-allow-unauthenticated")
+    if runtime_service_account:
+        command.extend(["--service-account", runtime_service_account])
     if env_vars:
         command.extend(["--set-env-vars", ",".join(f"{key}={value}" for key, value in env_vars.items())])
     if secret_bindings:
@@ -134,7 +152,8 @@ def smoke_check_service(
     service_url: str,
 ) -> None:
     normalized_service_url = service_url.rstrip("/")
-    _http_request("GET", f"{normalized_service_url}{manifest.healthcheck}")
+    headers = _cloud_run_auth_headers(normalized_service_url)
+    _http_request("GET", f"{normalized_service_url}{manifest.healthcheck}", headers=headers)
     smoke_type = manifest.smoke_check_type
     if smoke_type == "route-estimate":
         payload = {
@@ -147,12 +166,14 @@ def smoke_check_service(
             "POST",
             f"{service_url.rstrip('/')}/v1/tools/route-estimate",
             payload,
+            headers=headers,
         )
         return
     if smoke_type == "fasta2a-day-schedule":
         agent_card = _http_request(
             "GET",
             f"{normalized_service_url}/.well-known/agent-card.json",
+            headers=headers,
         )
         advertised_url = str(agent_card.get("url", "")).rstrip("/")
         if advertised_url != normalized_service_url:
@@ -160,13 +181,17 @@ def smoke_check_service(
                 "Agent card URL does not match deployed service URL: "
                 f"{advertised_url!r} != {normalized_service_url!r}"
             )
-        task_id = _send_agent3_message(normalized_service_url)
-        _poll_agent3_task(normalized_service_url, task_id)
+        task_id = _send_agent3_message(normalized_service_url, headers=headers)
+        _poll_agent3_task(normalized_service_url, task_id, headers=headers)
         return
     raise ValueError(f"unsupported smoke check type: {smoke_type}")
 
 
-def _send_agent3_message(service_url: str) -> str:
+def _send_agent3_message(
+    service_url: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> str:
     payload = {
         "jsonrpc": "2.0",
         "id": "smoke-schedule-1",
@@ -204,14 +229,19 @@ def _send_agent3_message(service_url: str) -> str:
             "configuration": {"acceptedOutputModes": ["application/json"]},
         },
     }
-    response = _http_request("POST", service_url.rstrip("/") + "/", payload)
+    response = _http_request("POST", service_url.rstrip("/") + "/", payload, headers=headers)
     task_id = response.get("result", {}).get("id")
     if not isinstance(task_id, str) or not task_id:
         raise ValueError("Agent 3 smoke request did not return a task id")
     return task_id
 
 
-def _poll_agent3_task(service_url: str, task_id: str) -> None:
+def _poll_agent3_task(
+    service_url: str,
+    task_id: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> None:
     deadline = time.time() + 30
     while time.time() < deadline:
         payload = {
@@ -220,7 +250,12 @@ def _poll_agent3_task(service_url: str, task_id: str) -> None:
             "method": "tasks/get",
             "params": {"id": task_id},
         }
-        response = _http_request("POST", service_url.rstrip("/") + "/", payload)
+        response = _http_request(
+            "POST",
+            service_url.rstrip("/") + "/",
+            payload,
+            headers=headers,
+        )
         state = response.get("result", {}).get("status", {}).get("state")
         if state == "completed":
             return
@@ -230,13 +265,19 @@ def _poll_agent3_task(service_url: str, task_id: str) -> None:
     raise TimeoutError("Agent 3 smoke task did not complete within 30 seconds")
 
 
-def _http_request(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def _http_request(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     data = None
-    headers = {}
+    request_headers = dict(headers or {})
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(url, method=method, data=data, headers=headers)
+        request_headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, method=method, data=data, headers=request_headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             body = response.read().decode("utf-8")
@@ -248,6 +289,29 @@ def _http_request(method: str, url: str, payload: dict[str, Any] | None = None) 
 
 def _cloud_run_service_name(manifest: ServiceManifest) -> str:
     return str(manifest.deploy["cloud_run_service"])
+
+
+def _cloud_run_auth_headers(service_url: str) -> dict[str, str]:
+    token = _print_identity_token(service_url.rstrip("/"))
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _print_identity_token(audience: str) -> str:
+    completed = subprocess.run(
+        [
+            "gcloud",
+            "auth",
+            "print-identity-token",
+            f"--audiences={audience}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    token = completed.stdout.strip()
+    if not token:
+        raise ValueError("gcloud auth print-identity-token returned an empty token")
+    return token
 
 
 def build_submit_command(

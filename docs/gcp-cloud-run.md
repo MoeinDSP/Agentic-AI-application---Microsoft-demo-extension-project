@@ -88,6 +88,8 @@ The resulting provider resource string is stored in the GitHub variable
 - `GCP_ARTIFACT_REGISTRY_REPOSITORY=agent-services`
 - `GCP_SERVICE_ACCOUNT_EMAIL=<github deployer service account email>`
 - `GCP_WORKLOAD_IDENTITY_PROVIDER=<projects/.../workloadIdentityPools/.../providers/...>`
+- `GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL=<agent-3 runtime service account email>`
+- `GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL=<agent-3-mcp runtime service account email>`
 - `AGENT3_AGENT4_BASE_URL=<external Agent 4 base URL>`
 
 ### Secrets
@@ -103,6 +105,11 @@ the Google Maps key from Secret Manager, not from GitHub.
 
 Use this only if WIF is not available yet. The intended long-term deploy auth is
 WIF, not a JSON key.
+
+### Recommended runtime service account naming
+
+- `agent-3-runtime@cloud-computing-course-495606.iam.gserviceaccount.com`
+- `agent-3-mcp-runtime@cloud-computing-course-495606.iam.gserviceaccount.com`
 
 ## Current Deployment Flow
 
@@ -120,8 +127,10 @@ For the current services:
 3. `agent-3` receives the resolved Cloud Run URL of `agent-3-mcp`
 4. `agent-3-mcp` receives the Google Maps key from Secret Manager
 5. `agent-3` receives `AGENT3_AGENT4_BASE_URL` from GitHub variables
-6. `agent-3` is redeployed with `AGENT3_PUBLIC_BASE_URL` set to its real Cloud
+6. both services are deployed with their configured runtime service accounts
+7. `agent-3` is redeployed with `AGENT3_PUBLIC_BASE_URL` set to its real Cloud
    Run URL so its FastA2A agent card advertises the correct endpoint
+8. `agent-3` is deployed with `AGENT3_MCP_AUTH_MODE=gcp_id_token`
 
 ## Post-Deploy Validation
 
@@ -160,25 +169,14 @@ Important limitation:
 
 External Agent 4 validation belongs in `live-smoke.yml`, not in the deploy gate.
 
-## Current Runtime Auth State
-
-The current manifests still use:
-
-- `allow_unauthenticated: true`
-
-That means both services are currently public Cloud Run services. This is
-temporary and should be treated as an initial deployment state, not the final
-production security model.
-
-## Intended Production Auth Model
-
-This is the intended next hardening step and is **not** implemented yet.
+## Runtime Auth Model
 
 ### External orchestrator -> Agent 3
 
 - private Cloud Run service
 - Workload Identity Federation from the external orchestrator into Google Cloud
 - Google-signed ID token presented to Cloud Run
+- mapped identity granted `roles/run.invoker` on Agent 3
 
 ### Agent 3 -> Agent 3 MCP
 
@@ -191,6 +189,14 @@ Important rule:
 - IAM and ID tokens are complementary, not alternatives
 - IAM decides who is allowed
 - the ID token is what the caller presents on each request
+
+### GitHub deploy auth
+
+- GitHub Actions uses WIF into the deployer service account
+- the deployer service account needs deployment permissions plus
+  `roles/iam.serviceAccountUser` on:
+  - `GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL`
+  - `GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL`
 
 ## Rollback / Redeploy
 
@@ -209,3 +215,5 @@ Rollback options:
   to the restaurant too early
 - route estimates carry `departure_time` from Agent 3 through MCP into Google
   Routes
+- local development keeps `AGENT3_MCP_AUTH_MODE=none`; Cloud Run deployment sets
+  `AGENT3_MCP_AUTH_MODE=gcp_id_token`

@@ -26,7 +26,10 @@ ci:
       value: a2a
 deploy:
   cloud_run_service: agent-3
-  allow_unauthenticated: true
+  allow_unauthenticated: false
+  runtime_service_account:
+    source: github_var
+    name: GCP_AGENT3_RUNTIME_SERVICE_ACCOUNT_EMAIL
   required_env:
     AGENT3_ENVIRONMENT:
       source: literal
@@ -42,6 +45,9 @@ deploy:
     AGENT3_AGENT4_INVOCATION_MODE:
       source: literal
       value: a2a
+    AGENT3_MCP_AUTH_MODE:
+      source: literal
+      value: gcp_id_token
     AGENT3_AGENT4_POLL_INTERVAL_SECONDS:
       source: literal
       value: "1.0"

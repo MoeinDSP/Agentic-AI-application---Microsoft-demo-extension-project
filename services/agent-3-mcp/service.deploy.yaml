@@ -22,7 +22,10 @@ ci:
       name: AGENT3_MCP_GOOGLE_MAPS_API_KEY
 deploy:
   cloud_run_service: agent-3-mcp
-  allow_unauthenticated: true
+  allow_unauthenticated: false
+  runtime_service_account:
+    source: github_var
+    name: GCP_AGENT3_MCP_RUNTIME_SERVICE_ACCOUNT_EMAIL
   required_env:
     AGENT3_MCP_ENVIRONMENT:
       source: literal

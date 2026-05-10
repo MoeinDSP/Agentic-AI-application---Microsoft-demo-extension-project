@@ -15,6 +15,7 @@ from tools.cicd.gcp_cloud_run import (
     build_submit_command,
     fetch_service_url,
     resolve_env_vars,
+    resolve_runtime_service_account,
     resolve_secret_bindings,
     smoke_check_service,
 )
@@ -56,6 +57,7 @@ def main() -> None:
             allow_missing_service_url=True,
         )
         secret_bindings = resolve_secret_bindings(manifest)
+        runtime_service_account = resolve_runtime_service_account(manifest)
         _run(
             build_run_deploy_command(
                 manifest,
@@ -63,6 +65,7 @@ def main() -> None:
                 region=args.region,
                 env_vars=env_vars,
                 secret_bindings=secret_bindings,
+                runtime_service_account=runtime_service_account,
             )
         )
         service_url = fetch_service_url(
@@ -84,6 +87,7 @@ def main() -> None:
                     region=args.region,
                     env_vars=final_env_vars,
                     secret_bindings=secret_bindings,
+                    runtime_service_account=runtime_service_account,
                 )
             )
             service_url = fetch_service_url(
