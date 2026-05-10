@@ -26,7 +26,7 @@ Context = list[Message]
 class FoodRecommenderWorker(Worker[Context]):
     """
     Executes food-recommendation tasks by forwarding them to the
-    Vertex AI ADK agent and writing the result back into the A2A task.
+    Google ADK agent and writing the result back into the A2A task.
     """
 
     # ── Main task handler ─────────────────────────────────────────────────────
@@ -133,15 +133,28 @@ class FoodRecommenderWorker(Worker[Context]):
             )
 
     async def _run_agent(self, session_id: str, prompt: str) -> str:
-        """Run the ADK agent and return the final response text."""
+        """
+        Run the ADK agent and return the final response text.
+
+        We capture the final response when we see it, but keep iterating
+        through the generator to exhaustion. Returning early from the
+        async-for would close the generator with GeneratorExit, which
+        causes ADK's OpenTelemetry tracing layer to fail when detaching
+        its span context (the token was attached in a different async
+        context than where the cleanup runs). The error is harmless but
+        spams the logs — draining the generator avoids it entirely.
+        """
+        final_text = ""
         async for event in runner.run_async(
             user_id="a2a_client",
             session_id=session_id,
             new_message=Content(parts=[Part(text=prompt)]),
         ):
             if event.is_final_response() and event.content and event.content.parts:
-                return event.content.parts[0].text or ""
-        return ""
+                text = event.content.parts[0].text or ""
+                if text:
+                    final_text = text
+        return final_text
 
     def _make_artifacts(self, response_text: str) -> list[Artifact]:
         """
@@ -158,7 +171,7 @@ class FoodRecommenderWorker(Worker[Context]):
         ]
 
         try:
-            # Strip markdown code fences if Gemini wraps output in ```json ... ```
+            # Strip markdown code fences if the model wraps output in ```json ... ```
             clean = response_text.strip()
             if clean.startswith("```"):
                 clean = "\n".join(clean.split("\n")[1:-1])
