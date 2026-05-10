@@ -114,6 +114,16 @@ def select_deploy_services(
     *,
     backend: str,
 ) -> list[ServiceManifest]:
+    if _includes_ci_infra_change(changed_files):
+        selected = [
+            manifest
+            for manifest in sorted(manifests.values(), key=lambda item: item.service_name)
+            if manifest.ownership == "repo-deployed"
+            and manifest.deploy_enabled
+            and manifest.backend == backend
+        ]
+        return order_manifests(manifests, selected)
+
     changed_names = _changed_manifest_names(manifests, changed_files)
     selected = [
         manifests[name]

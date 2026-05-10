@@ -61,3 +61,19 @@ class MetadataTests(unittest.TestCase):
             [manifest.service_name for manifest in ordered],
             ["agent-3-mcp", "agent-3"],
         )
+
+    def test_select_deploy_services_for_ci_infra_change_selects_all_repo_deployed_services(
+        self,
+    ) -> None:
+        manifests = load_manifests()
+
+        ordered = select_deploy_services(
+            manifests,
+            [".github/scripts/deploy_gcp_cloud_run.py"],
+            backend="gcp-cloud-run",
+        )
+
+        self.assertEqual(
+            [manifest.service_name for manifest in ordered],
+            ["agent-3-mcp", "agent-3"],
+        )
