@@ -7,6 +7,8 @@ from unittest.mock import patch
 from tools.cicd.gcp_cloud_run import (
     build_image_uri,
     build_run_deploy_command,
+    build_submit_command,
+    extract_build_id,
     resolve_runtime_service_account,
     resolve_env_vars,
     resolve_secret_bindings,
@@ -27,6 +29,26 @@ class GcpCloudRunTests(unittest.TestCase):
             ),
             "europe-west1-docker.pkg.dev/cloud-computing-course-495606/agent-services/agent-3:abc123",
         )
+
+    def test_build_submit_command_uses_async_mode(self) -> None:
+        manifest = load_manifests()["agent-3-mcp"]
+
+        command = build_submit_command(
+            manifest,
+            image_uri="europe-west1-docker.pkg.dev/project/repo/agent-3-mcp:tag",
+        )
+
+        self.assertIn("--async", command)
+
+    def test_extract_build_id_parses_gcloud_submit_output(self) -> None:
+        output = (
+            "Created [https://cloudbuild.googleapis.com/v1/projects/project/builds/"
+            "e4aa618e-9e2c-4970-80d5-e7906d560ddb].\n"
+        )
+
+        build_id = extract_build_id(output)
+
+        self.assertEqual(build_id, "e4aa618e-9e2c-4970-80d5-e7906d560ddb")
 
     def test_resolve_env_vars_uses_dependency_url_and_github_var(self) -> None:
         manifests = load_manifests()

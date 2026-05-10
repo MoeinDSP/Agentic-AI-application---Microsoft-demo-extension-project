@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.error
@@ -326,9 +327,50 @@ def build_submit_command(
         str((REPO_ROOT / manifest.build_context).resolve()),
         "--tag",
         image_uri,
+        "--async",
     ]
     dockerfile_path = (REPO_ROOT / manifest.dockerfile).resolve()
     expected_dockerfile = (REPO_ROOT / manifest.build_context / "Dockerfile").resolve()
     if dockerfile_path != expected_dockerfile:
         command.extend(["--file", str(dockerfile_path)])
     return command
+
+
+def extract_build_id(output: str) -> str:
+    match = re.search(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+        output,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError(f"Could not extract Cloud Build id from output: {output!r}")
+    return match.group(0)
+
+
+def wait_for_build(build_id: str, *, timeout_seconds: int = 1800) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        completed = subprocess.run(
+            [
+                "gcloud",
+                "builds",
+                "describe",
+                build_id,
+                "--format=json",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+        status = str(payload.get("status", "")).upper()
+        if status == "SUCCESS":
+            return
+        if status in {"FAILURE", "INTERNAL_ERROR", "TIMEOUT", "CANCELLED", "EXPIRED"}:
+            log_url = payload.get("logUrl", "")
+            raise RuntimeError(
+                f"Cloud Build {build_id} finished with status {status}. "
+                f"Inspect logs at {log_url or 'Cloud Build history'}."
+            )
+        time.sleep(5)
+    raise TimeoutError(f"Cloud Build {build_id} did not finish within {timeout_seconds} seconds")

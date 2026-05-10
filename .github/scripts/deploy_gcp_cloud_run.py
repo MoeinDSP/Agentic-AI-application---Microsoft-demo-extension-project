@@ -13,11 +13,13 @@ from tools.cicd.gcp_cloud_run import (
     build_image_uri,
     build_run_deploy_command,
     build_submit_command,
+    extract_build_id,
     fetch_service_url,
     resolve_env_vars,
     resolve_runtime_service_account,
     resolve_secret_bindings,
     smoke_check_service,
+    wait_for_build,
 )
 from tools.cicd.metadata import load_manifests, order_manifests
 
@@ -49,7 +51,9 @@ def main() -> None:
             service_name=manifest.service_name,
             tag=args.tag,
         )
-        _run(build_submit_command(manifest, image_uri=image_uri))
+        build_output = _run(build_submit_command(manifest, image_uri=image_uri))
+        build_id = extract_build_id(build_output)
+        wait_for_build(build_id)
         env_vars = resolve_env_vars(
             manifest,
             deployed_urls=deployed_urls,
@@ -102,8 +106,13 @@ def main() -> None:
         print(f"Deployed {manifest.service_name} to {service_url}")
 
 
-def _run(command: list[str]) -> None:
-    subprocess.run(command, check=True)
+def _run(command: list[str]) -> str:
+    completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    return completed.stdout
 
 
 if __name__ == "__main__":
