@@ -93,6 +93,41 @@ def test_route_estimate_uses_google_routes(monkeypatch: pytest.MonkeyPatch) -> N
     assert "provider=google_routes" in response.notes
 
 
+def test_route_estimate_strips_whitespace_from_google_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_client = _MockClient(
+        response=_MockResponse(
+            {
+                "routes": [
+                    {
+                        "distanceMeters": 1250,
+                        "duration": "840s",
+                        "warnings": [],
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: mock_client)
+    service = ToolService(
+        Settings(
+            google_maps_api_key="test-key\r\n",
+            google_routes_timeout_seconds=5,
+        )
+    )
+
+    service.estimate_route(
+        RouteEstimateRequest(
+            origin=Coordinates(lat=41.9028, lng=12.4964),
+            destination=Coordinates(lat=41.8902, lng=12.4922),
+            mode="walking",
+        )
+    )
+
+    assert mock_client.calls[0][2]["X-Goog-Api-Key"] == "test-key"
+
+
 def test_route_estimate_uses_transit_departure_time(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_client = _MockClient(
         response=_MockResponse(

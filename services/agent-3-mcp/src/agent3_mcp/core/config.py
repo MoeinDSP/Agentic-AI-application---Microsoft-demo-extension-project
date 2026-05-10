@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,14 @@ class Settings(BaseSettings):
     google_maps_api_key: str | None = Field(default=None)
     google_routes_timeout_seconds: float = Field(default=5.0, gt=0)
     log_level: str = Field(default="INFO")
+
+    @field_validator("google_maps_api_key")
+    @classmethod
+    def normalize_google_maps_api_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
     model_config = SettingsConfigDict(
         env_prefix="AGENT3_MCP_",
