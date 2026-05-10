@@ -1,0 +1,36 @@
+service_name: agent-3-mcp
+ownership: repo-deployed
+deploy_enabled: true
+validate_enabled: true
+backend: gcp-cloud-run
+build_context: services/agent-3-mcp
+dockerfile: services/agent-3-mcp/Dockerfile
+runtime_port: 8090
+healthcheck: /health
+smoke_check_type: route-estimate
+depends_on: []
+ci:
+  enabled: true
+  working_directory: services/agent-3-mcp
+  install_command: uv sync --group dev
+  lint_command: uv run ruff check .
+  test_command: uv run pytest
+  live_smoke_command: uv run pytest tests/test_live_google_routes.py -q
+  live_smoke_env:
+    AGENT3_MCP_GOOGLE_MAPS_API_KEY:
+      source: github_secret
+      name: AGENT3_MCP_GOOGLE_MAPS_API_KEY
+deploy:
+  cloud_run_service: agent-3-mcp
+  allow_unauthenticated: true
+  required_env:
+    AGENT3_MCP_ENVIRONMENT:
+      source: literal
+      value: production
+    AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS:
+      source: literal
+      value: "5.0"
+  required_secrets:
+    AGENT3_MCP_GOOGLE_MAPS_API_KEY:
+      secret_name: agent3-mcp-google-maps-api-key
+      version: latest

@@ -1,13 +1,15 @@
-# GCP Cloud Run Deployment
+# GCP Cloud Run Adapter
 
-This repository deploys two services to Cloud Run for the real Agent 3 path:
+This document covers the GCP-specific adapter used by the repo-wide CI/CD
+framework documented in [ci-cd.md](./ci-cd.md).
+
+The current repo-owned Cloud Run services are:
 
 - `agent-3`
 - `agent-3-mcp`
 
-The external food recommender remains the remote FastA2A Agent 4 endpoint at:
-
-- `http://65.21.48.155:8004`
+Agent 4 remains external and must be provided through
+`AGENT3_AGENT4_BASE_URL`.
 
 ## Required GCP Setup
 
@@ -32,72 +34,86 @@ printf '%s' 'YOUR_GOOGLE_MAPS_API_KEY' | \
   gcloud secrets versions add agent3-mcp-google-maps-api-key --data-file=-
 ```
 
-## Build Images
+## Artifact Registry Defaults
 
-Example variables:
+Chosen defaults for the current setup:
 
 ```bash
-export PROJECT_ID="YOUR_PROJECT_ID"
+export PROJECT_ID="cloud-computing-course-495606"
 export REGION="europe-west1"
 export REPOSITORY="agent-services"
-export TAG="$(git rev-parse --short HEAD)"
 ```
 
-Build and push:
+You can override these through GitHub repository or environment variables:
 
-```bash
-gcloud builds submit services/agent-3 \
-  --tag "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/agent-3:${TAG}"
-
-gcloud builds submit services/agent-3-mcp \
-  --tag "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/agent-3-mcp:${TAG}"
-```
-
-## Deploy Agent 3 MCP
-
-```bash
-gcloud run deploy agent-3-mcp \
-  --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/agent-3-mcp:${TAG}" \
-  --platform managed \
-  --region "${REGION}" \
-  --allow-unauthenticated \
-  --set-env-vars "AGENT3_MCP_ENVIRONMENT=production,AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS=5.0" \
-  --set-secrets "AGENT3_MCP_GOOGLE_MAPS_API_KEY=agent3-mcp-google-maps-api-key:latest"
-```
-
-Save the resulting Cloud Run URL and use it as `AGENT3_MCP_BASE_URL` for Agent 3.
-
-## Deploy Agent 3
-
-Replace `AGENT3_MCP_BASE_URL` with the Agent 3 MCP Cloud Run URL.
-
-```bash
-gcloud run deploy agent-3 \
-  --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/agent-3:${TAG}" \
-  --platform managed \
-  --region "${REGION}" \
-  --allow-unauthenticated \
-  --set-env-vars "AGENT3_ENVIRONMENT=production,AGENT3_MCP_BASE_URL=https://AGENT3_MCP_URL,AGENT3_AGENT4_BASE_URL=http://65.21.48.155:8004,AGENT3_AGENT4_INVOCATION_MODE=a2a,AGENT3_AGENT4_POLL_INTERVAL_SECONDS=1.0,AGENT3_AGENT4_MAX_WAIT_SECONDS=15.0,AGENT3_FALLBACK_TRAVEL_MINUTES=10"
-```
+- `GCP_PROJECT_ID`
+- `GCP_REGION`
+- `GCP_ARTIFACT_REGISTRY_REPOSITORY`
 
 ## Validation
 
-After deployment:
+## GitHub-Side Configuration
+
+Repository or environment variables:
+
+- `GCP_PROJECT_ID`
+- `GCP_REGION`
+- `GCP_ARTIFACT_REGISTRY_REPOSITORY`
+- `GCP_SERVICE_ACCOUNT_EMAIL`
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `AGENT3_AGENT4_BASE_URL`
+
+Optional secret fallback:
+
+- `GCP_CREDENTIALS_JSON`
+
+Preferred auth is Workload Identity Federation via
+`google-github-actions/auth`. The credentials JSON fallback exists only to
+unblock the first rollout before WIF is configured.
+
+## Deployment Flow
+
+The deploy workflow:
+
+1. discovers changed repo-deployed services
+2. filters to `backend: gcp-cloud-run`
+3. deploys them in dependency order
+4. runs post-deploy smoke checks
+
+For the current services:
+
+- `agent-3-mcp` is deployed before `agent-3` when both change
+- `agent-3` receives the resolved Cloud Run URL of `agent-3-mcp`
+- `agent-3-mcp` receives the Google Maps key from Secret Manager
+- `agent-3` receives `AGENT3_AGENT4_BASE_URL` from GitHub configuration
+
+## Post-Deploy Validation
+
+After a deployment, the adapter runs service-type smoke checks.
+
+Current checks:
 
 ```bash
 curl https://AGENT3_URL/health
 curl https://AGENT3_MCP_URL/health
 ```
 
-Then send a sample `POST /v1/plan` request to Agent 3 and verify:
-
 - Agent 3 can reach Agent 3 MCP
 - Agent 3 MCP can reach Google Routes
-- Agent 3 can reach the external Agent 4 endpoint
-- the response still uses the existing public scheduling contract
+- Agent 3 can reach the configured external Agent 4 endpoint
+- Agent 3 FastA2A scheduling tasks complete successfully
+
+## Rollback / Redeploy
+
+Redeploy by:
+
+1. re-running the `deploy.yml` workflow for a known good commit, or
+2. reverting the merge on `main`, which will trigger a new deploy
+
+Cloud Run revision history remains available in GCP for operational rollback.
 
 ## Remaining Work
 
 - `place-details` remains placeholder.
 - Remote Agent 4 is still outside your GCP project.
-- This pass does not add CI/CD or Terraform.
+- Runtime auth hardening remains a separate follow-up from CI/CD itself.
