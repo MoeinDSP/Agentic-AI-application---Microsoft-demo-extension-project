@@ -58,6 +58,13 @@ Production deployment sets:
 - `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS=5.0`
 - `AGENT3_MCP_GOOGLE_MAPS_API_KEY=<Secret Manager injected secret>`
 
+Production notes:
+
+- the Secret Manager value must be non-empty and contain a real Google Maps key
+- surrounding secret whitespace is stripped by MCP before the key is used
+- deploy smoke uses a minimal walking route-estimate request without
+  `departure_time`
+
 For private Cloud Run deployment, MCP relies on Cloud Run IAM for ingress
 protection. Agent 3 must call it with a Google-signed ID token and a runtime
 service account that has `roles/run.invoker` on the MCP service.
@@ -82,5 +89,8 @@ uv run pytest
 - Agent 3 and Agent 3 MCP are the only repo-owned deployable services today.
 - Agent 3 MCP is deployed from this repo. Agent 4 is not.
 - `place-details` is intentionally still placeholder in this pass.
+- Google Routes HTTP error bodies are now logged to aid production debugging.
+- Route estimation can still fail on some hops and trigger Agent 3 fallback
+  behavior even when the overall system remains healthy.
 - For production deployment guidance, see
   [../../docs/gcp-cloud-run.md](../../docs/gcp-cloud-run.md).

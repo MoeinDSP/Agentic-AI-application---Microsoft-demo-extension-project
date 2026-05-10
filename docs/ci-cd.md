@@ -66,6 +66,13 @@ Behavior:
 This workflow is intentionally separate from PR gating and separate from deploy
 success criteria.
 
+Live smoke is advisory, not release-blocking:
+
+- failures in `live-smoke.yml` should be treated as integration diagnostics
+- they do not block `deploy.yml`
+- use them to validate external dependencies and richer scenarios after deploy,
+  not to decide whether the repo-owned services basically deployed correctly
+
 ### `deploy.yml`
 
 Runs on push to `main`.
@@ -76,6 +83,9 @@ Behavior:
 2. Filter to `backend: gcp-cloud-run`
 3. Deploy them in dependency order
 4. Run post-deploy smoke checks
+
+This flow has now been exercised successfully against the current private Cloud
+Run deployment path, including authenticated post-deploy smoke.
 
 Changes to shared deployment infrastructure under `.github/scripts/`,
 `.github/workflows/`, `tools/cicd/`, or `tests/cicd/` intentionally trigger
@@ -130,7 +140,7 @@ fallback exists only to unblock deployment before WIF is configured.
 
 ## Post-Deploy Guarantees
 
-The current deploy smoke checks guarantee:
+The current deploy smoke checks are now verified in production and guarantee:
 
 - `agent-3-mcp` responds on `/health`
 - `agent-3-mcp` can answer a real `/v1/tools/route-estimate` request
@@ -139,11 +149,27 @@ The current deploy smoke checks guarantee:
 - `agent-3` completes a FastA2A scheduling task
 - the Agent 3 agent-card URL matches the deployed Cloud Run service URL
 
+Authenticated smoke uses Google-signed ID tokens minted through the deployer
+service account via impersonation. This is part of the proven deployment path
+for private Cloud Run services.
+
 Current limitation:
 
 - deploy smoke intentionally does **not** verify external Agent 4 reachability
 - deploy smoke intentionally avoids meal windows so deployment success depends on
   Agent 3 itself, not on a third-party external meal recommender
+- route fallback warnings are not treated as deploy failures; they are runtime
+  behavior signals to investigate separately
+
+Operational note:
+
+- Agent 3 is intended to be redeployed automatically with
+  `AGENT3_PUBLIC_BASE_URL` set to the resolved Cloud Run URL
+- that automation exists and is the intended steady state
+- after this rollout, the agent-card URL should still be explicitly verified
+  post-deploy because one production rollout required a manual correction
+- meal-window validation should be run separately as a recommended post-deploy
+  check once `AGENT3_AGENT4_BASE_URL` is configured
 
 ## GCP Adapter
 
@@ -152,6 +178,7 @@ The GCP Cloud Run adapter:
 - builds container images with `gcloud builds submit`
 - pushes them to Artifact Registry
 - deploys them with `gcloud run deploy`
+- submits Cloud Build jobs asynchronously and polls them to completion
 - resolves dependency service URLs from Cloud Run
 - injects runtime secrets from Secret Manager
 - performs post-deploy smoke checks by service type
@@ -164,6 +191,25 @@ For Agent 3 specifically, deployment is a two-step update:
 
 That second step is required so the FastA2A agent card advertises the real
 production URL instead of a local default.
+
+## Current Verified State
+
+The following outcomes have been verified against the current production
+deployment:
+
+- `agent-3-mcp /health` succeeded on the deployed private Cloud Run service
+- `agent-3 /health` succeeded on the deployed private Cloud Run service
+- Agent 3 agent-card URL now matches the deployed Cloud Run URL
+- an authenticated no-meal FastA2A task completed successfully
+- an authenticated meal-window FastA2A task completed successfully after
+  `AGENT3_AGENT4_BASE_URL` was configured
+- the meal event in that production task was non-synthetic and came from the
+  external Agent 4 service
+- route fallback warnings were still observed on some hops during the meal-window
+  test
+
+These observations are operational evidence from the current rollout, not a
+guarantee that every future request will be warning-free.
 
 ## Current Security State
 
