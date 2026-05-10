@@ -3,6 +3,7 @@ from functools import lru_cache
 import httpx
 
 from agent3_mcp.core.config import Settings, get_settings
+from agent3_mcp.core.logging import get_logger
 from agent3_mcp.models.tools import (
     PlaceDetail,
     PlaceDetailsRequest,
@@ -24,6 +25,7 @@ GOOGLE_TRAVEL_MODES = {
 class ToolService:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+        self._logger = get_logger(__name__, environment=self._settings.environment)
 
     def estimate_route(self, request: RouteEstimateRequest) -> RouteEstimateResponse:
         if not self._settings.google_maps_api_key:
@@ -63,7 +65,16 @@ class ToolService:
                     "X-Goog-FieldMask": FIELD_MASK,
                 },
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError:
+                self._logger.error(
+                    "Google Routes request failed with status %s: %s",
+                    response.status_code,
+                    response.text,
+                    extra={"event": "google_routes_http_error"},
+                )
+                raise
 
         routes = response.json().get("routes", [])
         if not routes:
