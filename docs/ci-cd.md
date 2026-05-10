@@ -66,6 +66,13 @@ Behavior:
 This workflow is intentionally separate from PR gating and separate from deploy
 success criteria.
 
+Live smoke is advisory, not release-blocking:
+
+- failures in `live-smoke.yml` should be treated as integration diagnostics
+- they do not block `deploy.yml`
+- use them to validate external dependencies and richer scenarios after deploy,
+  not to decide whether the repo-owned services basically deployed correctly
+
 ### `deploy.yml`
 
 Runs on push to `main`.
@@ -151,6 +158,8 @@ Current limitation:
 - deploy smoke intentionally does **not** verify external Agent 4 reachability
 - deploy smoke intentionally avoids meal windows so deployment success depends on
   Agent 3 itself, not on a third-party external meal recommender
+- route fallback warnings are not treated as deploy failures; they are runtime
+  behavior signals to investigate separately
 
 Operational note:
 

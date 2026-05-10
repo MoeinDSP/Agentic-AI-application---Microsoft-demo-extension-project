@@ -58,4 +58,16 @@ jobs:
         run: ${{ matrix.service.install_command }}
 
       - name: Run live smoke
+        id: live_smoke
+        continue-on-error: true
         run: python .github/scripts/run_live_smoke.py --service "${{ matrix.service.service_name }}"
+
+      - name: Summarize live smoke result
+        if: ${{ always() }}
+        run: |
+          if [ "${{ steps.live_smoke.outcome }}" = "success" ]; then
+            echo "Live smoke passed for ${{ matrix.service.service_name }}." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Live smoke reported a non-blocking failure for ${{ matrix.service.service_name }}." >> "$GITHUB_STEP_SUMMARY"
+            echo "Inspect the Run live smoke step logs before trusting the external integration state." >> "$GITHUB_STEP_SUMMARY"
+          fi
