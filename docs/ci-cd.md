@@ -1,15 +1,14 @@
 # CI/CD Architecture
 
-This repository uses a repo-wide CI/CD framework that is intentionally broader
-than the current deployment scope.
-
-The current repo-owned deployable services are:
+This repository uses a repo-wide CI/CD framework that is broader than the
+current deployment scope, but only two services are deployed from this repo
+today:
 
 - `services/agent-3`
 - `services/agent-3-mcp`
 
-Other services can be merged into the monorepo later without being deployed
-automatically, as long as they do not opt into the deployment contract.
+Other services can live in the monorepo without being deployed automatically as
+long as they do not opt into the deployment contract.
 
 ## Deployment Model
 
@@ -17,38 +16,28 @@ automatically, as long as they do not opt into the deployment contract.
 - **CD orchestrator:** GitHub Actions
 - **Current deploy backend:** GCP Cloud Run
 - **Current image registry:** Artifact Registry
-- **Current secret store for runtime secrets:** Google Secret Manager
-- **Current release strategy:** auto-deploy on merge to `main`
-- **Current environment model:** production only
+- **Current runtime secret store:** Google Secret Manager
+- **Release trigger:** merge to `main`
+- **Environment model:** production only
 
-GitHub Actions is the repo-level control plane so future services can add
+GitHub Actions remains the repo-level control plane so future services can add
 non-GCP deploy adapters without redesigning the monorepo workflow model.
 
 ## Service Deployment Contract
 
 Each deployable service defines `service.deploy.yaml` under its service root.
 
-Required top-level fields:
-
-- `service_name`
-- `ownership`
-- `deploy_enabled`
-- `validate_enabled`
-- `backend`
-- `build_context`
-- `dockerfile`
-- `runtime_port`
-- `healthcheck`
-- `smoke_check_type`
-- `depends_on`
-- `ci`
-- `deploy`
-
 Current ownership modes:
 
-- `repo-deployed`: this repo’s CD pipeline owns deployment
-- `external`: the service is used by this repo but deployed elsewhere
+- `repo-deployed`: this repo's CD pipeline owns deployment
+- `external`: this repo integrates with the service, but another system deploys it
 - `undeployed`: the service exists in source control but is not part of CD
+
+Current ownership in this repo:
+
+- `agent-3`: `repo-deployed`
+- `agent-3-mcp`: `repo-deployed`
+- Agent 4: external dependency only, configured through `AGENT3_AGENT4_BASE_URL`
 
 ## Workflows
 
@@ -61,7 +50,7 @@ Behavior:
 
 1. Discover changed services from manifests and changed files
 2. Run repo-level CI/CD tests
-3. Run service-level `uv`/lint/test validation for affected services
+3. Run service-level `uv sync`, `ruff`, and `pytest` for affected services
 
 ### `live-smoke.yml`
 
@@ -74,7 +63,8 @@ Behavior:
 - runs the external Agent 4 smoke test for `agent-3` when
   `AGENT3_AGENT4_BASE_URL` is configured
 
-This workflow is intentionally separate from PR gating.
+This workflow is intentionally separate from PR gating and separate from deploy
+success criteria.
 
 ### `deploy.yml`
 
@@ -87,9 +77,15 @@ Behavior:
 3. Deploy them in dependency order
 4. Run post-deploy smoke checks
 
+Current dependency rule:
+
+- `agent-3` depends on `agent-3-mcp`
+
+If both change in one merge, `agent-3-mcp` deploys first.
+
 ## GitHub Configuration
 
-Repository or environment variables:
+### Repository or environment variables
 
 - `GCP_PROJECT_ID`
 - `GCP_REGION`
@@ -98,12 +94,44 @@ Repository or environment variables:
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `AGENT3_AGENT4_BASE_URL`
 
-Optional GitHub secret fallback:
+### Repository or environment secrets
+
+- `AGENT3_MCP_GOOGLE_MAPS_API_KEY`
+
+### Optional fallback secret
 
 - `GCP_CREDENTIALS_JSON`
 
-The preferred authentication path is Workload Identity Federation. The JSON key
-fallback exists only so the workflow can still run before WIF is configured.
+Use Workload Identity Federation as the preferred deploy auth path. The JSON key
+fallback exists only to unblock deployment before WIF is configured.
+
+## Runtime Secret and Config Ownership
+
+- `AGENT3_MCP_GOOGLE_MAPS_API_KEY`
+  - runtime secret for `agent-3-mcp`
+  - owned by Google Secret Manager in production
+  - also stored as a GitHub Actions secret only for `live-smoke.yml`
+- `AGENT3_AGENT4_BASE_URL`
+  - deployment-time config for `agent-3`
+  - owned by GitHub variables
+  - required because Agent 4 is external and is not deployed from this repo
+
+## Post-Deploy Guarantees
+
+The current deploy smoke checks guarantee:
+
+- `agent-3-mcp` responds on `/health`
+- `agent-3-mcp` can answer a real `/v1/tools/route-estimate` request
+- `agent-3` responds on `/health`
+- `agent-3` exposes an agent card
+- `agent-3` completes a FastA2A scheduling task
+- the Agent 3 agent-card URL matches the deployed Cloud Run service URL
+
+Current limitation:
+
+- deploy smoke intentionally does **not** verify external Agent 4 reachability
+- deploy smoke intentionally avoids meal windows so deployment success depends on
+  Agent 3 itself, not on a third-party external meal recommender
 
 ## GCP Adapter
 
@@ -116,15 +144,19 @@ The GCP Cloud Run adapter:
 - injects runtime secrets from Secret Manager
 - performs post-deploy smoke checks by service type
 
-Current dependency rule:
+For Agent 3 specifically, deployment is a two-step update:
 
-- `agent-3` depends on `agent-3-mcp`
+1. deploy the service
+2. read the deployed Cloud Run URL
+3. redeploy Agent 3 with `AGENT3_PUBLIC_BASE_URL` set to that URL
 
-If both change in one merge, `agent-3-mcp` deploys first.
+That second step is required so the FastA2A agent card advertises the real
+production URL instead of a local default.
 
-## Runtime Secret Ownership
+## Current Security State
 
-- `AGENT3_MCP_GOOGLE_MAPS_API_KEY` is a runtime secret owned by GCP Secret Manager
-- `AGENT3_AGENT4_BASE_URL` is a deployment-time config value owned by GitHub variables
+The current manifests still deploy both services with
+`allow_unauthenticated: true`.
 
-Agent 4 is external and env-driven. It is not deployed from this repository.
+That is a temporary public-first deployment mode. Runtime auth hardening is a
+separate follow-up and is not part of the current deploy gate.

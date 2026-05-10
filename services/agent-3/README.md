@@ -84,6 +84,8 @@ Schedule events are chronological and use `event_type`:
 - Agent 4 is called for each inserted lunch or dinner.
 - If Agent 4 is unavailable or returns no candidates, Agent 3 inserts a
   synthetic meal event and records a warning.
+- If a meal window has not started yet, Agent 3 delays restaurant travel until
+  it is actually needed instead of sending the user to the restaurant early.
 - Agent 4 is treated as an external dependency and is configured through
   `AGENT3_AGENT4_BASE_URL`.
 
@@ -170,14 +172,41 @@ uv run pytest
 
 ## Environment Variables
 
-- `AGENT3_MCP_BASE_URL`: route tool base URL.
-- `AGENT3_AGENT4_BASE_URL`: external Agent 4 base URL. Required for
-  restaurant-backed meal recommendations.
-- `AGENT3_AGENT4_INVOCATION_MODE`: `http` or `a2a`.
-- `AGENT3_AGENT4_POLL_INTERVAL_SECONDS`: FastA2A poll interval.
-- `AGENT3_AGENT4_MAX_WAIT_SECONDS`: FastA2A max task wait.
-- `AGENT3_FALLBACK_TRAVEL_MINUTES`: deterministic fallback route duration.
-- `AGENT3_DEFAULT_TRANSPORT_MODE`: default public transport mode.
+All settings use the `AGENT3_` prefix.
+
+| Variable | Required | Source | Meaning |
+| --- | --- | --- | --- |
+| `AGENT3_APP_NAME` | No | local/deploy | Service name override. |
+| `AGENT3_ENVIRONMENT` | No | local/deploy | Environment label such as `development` or `production`. |
+| `AGENT3_SERVICE_VERSION` | No | local/deploy | Version string exposed by the FastA2A agent. |
+| `AGENT3_HOST` | No | local | Local bind host. |
+| `AGENT3_PORT` | No | local | Local bind port. |
+| `AGENT3_PUBLIC_BASE_URL` | Yes in deploy, no locally | local/deploy | Public URL advertised in the FastA2A agent card. Cloud Run deployment injects the real service URL automatically. |
+| `AGENT3_MCP_BASE_URL` | Yes | local/deploy | Base URL for the Agent 3 MCP route tool service. |
+| `AGENT3_MCP_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Agent 3 to MCP requests. |
+| `AGENT3_AGENT4_BASE_URL` | Yes for production meals | local/deploy | External Agent 4 base URL. Agent 4 is not implemented in this repo. |
+| `AGENT3_AGENT4_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Agent 4 calls. |
+| `AGENT3_AGENT4_INVOCATION_MODE` | No | local/deploy | Agent 4 invocation mode. Current production setting is `a2a`. |
+| `AGENT3_AGENT4_POLL_INTERVAL_SECONDS` | No | local/deploy | Poll interval for FastA2A task completion when calling Agent 4. |
+| `AGENT3_AGENT4_MAX_WAIT_SECONDS` | No | local/deploy | Maximum wait for Agent 4 FastA2A task completion. |
+| `AGENT3_FALLBACK_TRAVEL_MINUTES` | No | local/deploy | Deterministic travel duration used when MCP route estimation fails. |
+| `AGENT3_DEFAULT_TRANSPORT_MODE` | No | local/deploy | Default transport mode when none is supplied in the request. |
+| `AGENT3_LOG_LEVEL` | No | local/deploy | Application log level. |
+
+Local startup typically sets:
+
+- `AGENT3_PUBLIC_BASE_URL=http://127.0.0.1:8080`
+- `AGENT3_MCP_BASE_URL=http://127.0.0.1:8090`
+- `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL>`
+
+Production deployment sets:
+
+- `AGENT3_ENVIRONMENT=production`
+- `AGENT3_PUBLIC_BASE_URL=<deployed Cloud Run URL>`
+- `AGENT3_MCP_BASE_URL=<deployed agent-3-mcp URL>`
+- `AGENT3_AGENT4_BASE_URL=<external Agent 4 URL from GitHub variables>`
+
+Agent 3 does not own or deploy Agent 4. It only consumes an external URL.
 
 ## Deployment
 

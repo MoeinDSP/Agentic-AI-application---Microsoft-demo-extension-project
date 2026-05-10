@@ -27,12 +27,36 @@ Supported public transport modes:
 - `transit`
 - `bicycling`
 
+Route requests can also include `departure_time`, which Agent 3 forwards from
+the actual travel start time. This is especially important for transit
+estimates.
+
 ## Configuration
 
 Copy `.env.example` to `.env` if needed.
 
-- `AGENT3_MCP_GOOGLE_MAPS_API_KEY`: required for Google Routes requests.
-- `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS`: provider HTTP timeout.
+All settings use the `AGENT3_MCP_` prefix.
+
+| Variable | Required | Source | Meaning |
+| --- | --- | --- | --- |
+| `AGENT3_MCP_APP_NAME` | No | local/deploy | Service name override. |
+| `AGENT3_MCP_ENVIRONMENT` | No | local/deploy | Environment label such as `development` or `production`. |
+| `AGENT3_MCP_HOST` | No | local | Local bind host. |
+| `AGENT3_MCP_PORT` | No | local | Local bind port. |
+| `AGENT3_MCP_GOOGLE_MAPS_API_KEY` | Yes | local/deploy | Google Maps Platform key used for Routes API requests. In production this is injected from Secret Manager. |
+| `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS` | No | local/deploy | HTTP timeout for Google Routes requests. |
+| `AGENT3_MCP_LOG_LEVEL` | No | local/deploy | Application log level. |
+
+Local startup typically sets:
+
+- `AGENT3_MCP_GOOGLE_MAPS_API_KEY=<real Google Maps key>`
+- `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS=5.0`
+
+Production deployment sets:
+
+- `AGENT3_MCP_ENVIRONMENT=production`
+- `AGENT3_MCP_GOOGLE_ROUTES_TIMEOUT_SECONDS=5.0`
+- `AGENT3_MCP_GOOGLE_MAPS_API_KEY=<Secret Manager injected secret>`
 
 ## Run
 
@@ -51,6 +75,8 @@ uv run pytest
 ## Notes
 
 - Route requests use coordinate-only inputs and request duration and distance.
+- Agent 3 and Agent 3 MCP are the only repo-owned deployable services today.
+- Agent 3 MCP is deployed from this repo. Agent 4 is not.
 - `place-details` is intentionally still placeholder in this pass.
 - For production deployment guidance, see
   [../../docs/gcp-cloud-run.md](../../docs/gcp-cloud-run.md).
