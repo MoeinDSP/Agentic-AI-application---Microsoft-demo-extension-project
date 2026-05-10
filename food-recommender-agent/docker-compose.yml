@@ -7,20 +7,17 @@ services:
       dockerfile: Dockerfile
     container_name: agent4_food_recommender
 
-    # Bind to all interfaces so the host firewall / reverse proxy
     ports:
       - "${AGENT_HOST:-0.0.0.0}:${AGENT_PORT:-8004}:8004"
 
-    # All secrets injected via .env — nothing hardcoded
+    # All secrets injected via .env — nothing hardcoded.
+    # OpenRouter + Google Places are both plain API keys, so no
+    # service-account JSON volumes are needed anymore.
     env_file:
       - .env
 
-    # GCP service-account key mounted from host
-    volumes:
-      - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials}:/app/credentials:ro
-
     environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+      AGENT3_URL: http://localhost:8003
 
     restart: unless-stopped
 

@@ -8,17 +8,26 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── Google Cloud ──────────────────────────────────────────────────────────
-    google_cloud_project: str
-    google_cloud_location: str = "us-central1"
+    # ── LLM (OpenRouter via LiteLLM) ──────────────────────────────────────────
+    # OpenRouter gives access to many providers behind one API key.
+    # The model string MUST start with "openrouter/" — that's the prefix
+    # LiteLLM uses to route the call. Examples:
+    #   openrouter/openai/gpt-4o-mini
+    #   openrouter/anthropic/claude-3.5-sonnet
+    #   openrouter/google/gemini-2.0-flash-001
+    #   openrouter/meta-llama/llama-3.3-70b-instruct
+    openrouter_api_key: str
+    openrouter_model: str = "openrouter/openai/gpt-4o-mini"
+
+    # Optional but recommended by OpenRouter — shown on their dashboard,
+    # used for usage attribution. Leave blank if you don't have one.
+    openrouter_site_url: str = ""
+    openrouter_app_name: str = "Food Recommender Agent"
 
     # ── Google Places API ─────────────────────────────────────────────────────
+    # A simple API key (NOT a service account). See README for setup.
     google_places_api_key: str
 
-    # ── Vertex AI / ADK ───────────────────────────────────────────────────────
-    vertex_ai_model: str = "gemini-2.0-flash"
-    google_api_key: str = ""
-    
     # ── A2A server ────────────────────────────────────────────────────────────
     agent_host: str = "0.0.0.0"
     agent_port: int = 8004

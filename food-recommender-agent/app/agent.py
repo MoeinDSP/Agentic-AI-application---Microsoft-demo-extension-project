@@ -1,6 +1,9 @@
 """
-Vertex AI ADK agent — Agent 4: Food Recommender.
-Uses Gemini API key for local dev, Vertex AI for production.
+Google ADK agent — Agent 4: Food Recommender.
+
+Uses Google ADK as the agent framework, but routes the underlying LLM
+calls through OpenRouter via LiteLLM. This gives access to OpenAI,
+Anthropic, Google, Meta, Mistral, and many others behind a single key.
 """
 from __future__ import annotations
 
@@ -8,21 +11,22 @@ import json
 import os
 
 from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 
 from app.core.config import settings
 from app.tools.places_api import search_restaurants
 
-# ── Auth: Vertex AI (production) or Gemini API key (local dev) ───────────────
-if settings.google_cloud_project:
-    # Tell google.genai to use Vertex AI backend
-    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "1"
-    os.environ["GOOGLE_CLOUD_PROJECT"]      = settings.google_cloud_project
-    os.environ["GOOGLE_CLOUD_LOCATION"]     = settings.google_cloud_location
-elif settings.google_api_key:
-    # Use direct Gemini API key
-    os.environ["GOOGLE_API_KEY"] = settings.google_api_key
+# ── OpenRouter credentials for LiteLLM ────────────────────────────────────────
+# LiteLLM reads OPENROUTER_API_KEY from the environment automatically.
+# The two OR_SITE_URL / OR_APP_NAME variables are optional headers
+# OpenRouter uses for usage attribution on its dashboard.
+os.environ["OPENROUTER_API_KEY"] = settings.openrouter_api_key
+if settings.openrouter_site_url:
+    os.environ["OR_SITE_URL"] = settings.openrouter_site_url
+if settings.openrouter_app_name:
+    os.environ["OR_APP_NAME"] = settings.openrouter_app_name
 
 
 # ── ADK Tool ──────────────────────────────────────────────────────────────────
@@ -60,9 +64,12 @@ async def find_restaurants_tool(
 
 
 # ── ADK Agent ─────────────────────────────────────────────────────────────────
+# `LiteLlm(model=...)` is ADK's adapter for non-Gemini models.
+# Whatever string you pass is forwarded to LiteLLM, which routes it
+# to the right provider — `openrouter/<provider>/<model>` for OpenRouter.
 food_agent = Agent(
     name="food_recommender",
-    model=settings.vertex_ai_model,
+    model=LiteLlm(model=settings.openrouter_model),
     description=settings.agent_description,
     instruction=(
         "You are a precision-oriented restaurant recommendation agent "
