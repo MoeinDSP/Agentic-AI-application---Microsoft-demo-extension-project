@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import httpx
 import pytest
 
@@ -131,6 +133,37 @@ def test_mcp_route_client_uses_explicit_transport_mode(
 
     assert captured["mode"] == "driving"
     assert response.mode == "driving"
+
+
+def test_mcp_route_client_serializes_departure_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _CapturingClient(_MockClient):
+        def post(self, url: str, json: dict[str, object]) -> _MockResponse:
+            captured.update(json)
+            return _MockResponse(
+                {
+                    "mode": json["mode"],
+                    "estimated_distance_km": 3.1,
+                    "estimated_duration_minutes": 18,
+                    "notes": ["mock_success"],
+                }
+            )
+
+    monkeypatch.setattr(httpx, "Client", lambda timeout: _CapturingClient())
+    client = MCPRouteClient(Settings())
+    departure_time = datetime.fromisoformat("2026-05-02T08:15:00")
+
+    client.estimate_route(
+        origin=Coordinates(lat=41.9, lng=12.4),
+        destination=Coordinates(lat=41.8, lng=12.5),
+        transport_preferences=["transit"],
+        departure_time=departure_time,
+    )
+
+    assert captured["departure_time"] == "2026-05-02T08:15:00"
 
 
 def test_mcp_route_client_raises_on_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:

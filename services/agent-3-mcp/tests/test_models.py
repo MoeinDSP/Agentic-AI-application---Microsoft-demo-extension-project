@@ -39,6 +39,20 @@ def test_route_estimate_request_accepts_bicycling_mode() -> None:
     assert request.mode == "bicycling"
 
 
+def test_route_estimate_request_accepts_departure_time() -> None:
+    request = RouteEstimateRequest.model_validate(
+        {
+            "origin": {"lat": 41.9028, "lng": 12.4964},
+            "destination": {"lat": 41.8902, "lng": 12.4922},
+            "mode": "transit",
+            "departure_time": "2026-05-02T08:15:00",
+        }
+    )
+
+    assert request.departure_time is not None
+    assert request.departure_time.isoformat() == "2026-05-02T08:15:00"
+
+
 def test_route_estimate_request_rejects_unsupported_mode() -> None:
     with pytest.raises(ValidationError):
         RouteEstimateRequest.model_validate(

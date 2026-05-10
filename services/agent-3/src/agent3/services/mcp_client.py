@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import lru_cache
 
 import httpx
@@ -23,12 +24,14 @@ class MCPRouteClient:
         origin: Coordinates,
         destination: Coordinates,
         transport_preferences: list[str],
+        departure_time: datetime | None = None,
     ) -> TravelEstimate:
         mode = self.resolve_transport_mode(transport_preferences)
         request = MCPRouteEstimateRequest(
             origin=origin,
             destination=destination,
             mode=mode,
+            departure_time=departure_time,
         )
 
         try:

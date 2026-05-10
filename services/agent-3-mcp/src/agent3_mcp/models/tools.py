@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -14,6 +16,7 @@ class RouteEstimateRequest(BaseModel):
     origin: Coordinates
     destination: Coordinates
     mode: str = Field(min_length=1)
+    departure_time: datetime | None = None
 
     @field_validator("mode")
     @classmethod

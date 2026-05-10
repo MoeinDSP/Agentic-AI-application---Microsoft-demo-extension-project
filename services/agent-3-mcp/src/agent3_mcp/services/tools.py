@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from functools import lru_cache
 
 import httpx
@@ -52,8 +51,8 @@ class ToolService:
             "travelMode": GOOGLE_TRAVEL_MODES[request.mode],
             "units": "METRIC",
         }
-        if request.mode == "transit":
-            payload["departureTime"] = datetime.now(UTC).isoformat()
+        if request.departure_time is not None:
+            payload["departureTime"] = request.departure_time.isoformat()
 
         with httpx.Client(timeout=self._settings.google_routes_timeout_seconds) as client:
             response = client.post(

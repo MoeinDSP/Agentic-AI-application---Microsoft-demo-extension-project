@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from agent3.models.agent4 import MealRecommendationResponse, RestaurantCandidate
 from agent3.models.mcp import TravelEstimate
 from agent3.models.plan import (
@@ -20,6 +22,23 @@ class FixedRouteClient:
         self._travel_minutes = travel_minutes
 
     def estimate_route(self, **kwargs: object) -> TravelEstimate:
+        transport_preferences = kwargs.get("transport_preferences", [])
+        mode = transport_preferences[0] if transport_preferences else "walking"
+        return TravelEstimate(
+            source="mcp",
+            mode=mode,
+            estimated_duration_minutes=self._travel_minutes,
+            notes=["mock_mcp"],
+        )
+
+
+class CapturingRouteClient:
+    def __init__(self, travel_minutes: int) -> None:
+        self._travel_minutes = travel_minutes
+        self.calls: list[dict[str, object]] = []
+
+    def estimate_route(self, **kwargs: object) -> TravelEstimate:
+        self.calls.append(kwargs)
         transport_preferences = kwargs.get("transport_preferences", [])
         mode = transport_preferences[0] if transport_preferences else "walking"
         return TravelEstimate(
@@ -139,6 +158,34 @@ def test_planner_emits_travel_events_between_visits() -> None:
     assert travel.event_type == EVENT_TYPE_TRAVEL
     assert travel.estimated_travel_time_minutes == 10
     assert travel.transport_mode == "walking"
+
+
+def test_planner_passes_current_time_as_departure_time_for_place_travel() -> None:
+    request = _build_request(day_end="2026-04-20T12:00:00")
+    route_client = CapturingRouteClient(10)
+
+    PlannerService(route_client=route_client).plan_day(request)
+
+    assert route_client.calls[0]["departure_time"] == datetime.fromisoformat(
+        "2026-04-20T10:30:00"
+    )
+
+
+def test_planner_passes_current_time_as_departure_time_for_meal_travel() -> None:
+    request = _build_request(day_end="2026-04-20T15:00:00")
+    request.places[1].estimated_visit_duration_minutes = 180
+    route_client = CapturingRouteClient(10)
+
+    PlannerService(
+        route_client=route_client,
+        meal_client=CapturingMealClient(),
+    ).plan_day(request)
+
+    assert [call["departure_time"] for call in route_client.calls] == [
+        datetime.fromisoformat("2026-04-20T12:00:00"),
+        datetime.fromisoformat("2026-04-20T12:00:00"),
+        datetime.fromisoformat("2026-04-20T13:10:00"),
+    ]
 
 
 def test_planner_uses_fallback_when_route_estimation_fails() -> None:

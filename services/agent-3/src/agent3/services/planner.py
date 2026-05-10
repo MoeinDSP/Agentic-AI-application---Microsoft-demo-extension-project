@@ -47,6 +47,7 @@ class RouteEstimator(Protocol):
         origin: Coordinates,
         destination: Coordinates,
         transport_preferences: list[str],
+        departure_time: datetime | None = None,
     ) -> TravelEstimate: ...
 
 
@@ -67,7 +68,9 @@ class FixedTravelRouteClient:
         origin: Coordinates,
         destination: Coordinates,
         transport_preferences: list[str],
+        departure_time: datetime | None = None,
     ) -> TravelEstimate:
+        _ = departure_time
         return TravelEstimate(
             source="fallback",
             mode=transport_preferences[0] if transport_preferences else DEFAULT_TRANSPORT_MODE,
@@ -446,6 +449,7 @@ class PlannerService:
             origin=current_location,
             destination=destination,
             transport_preferences=[transport_mode],
+            departure_time=current_time,
         )
         return _TravelPlan(
             start_time=current_time,
@@ -462,12 +466,14 @@ class PlannerService:
         origin: Location,
         destination: Location,
         transport_preferences: list[str],
+        departure_time: datetime | None = None,
     ) -> TravelEstimate:
         try:
             return self._route_client.estimate_route(
                 origin=self._to_coordinates(origin),
                 destination=self._to_coordinates(destination),
                 transport_preferences=transport_preferences,
+                departure_time=departure_time,
             )
         except RouteEstimationError:
             return TravelEstimate(

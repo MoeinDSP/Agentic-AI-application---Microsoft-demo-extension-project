@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import httpx
 import pytest
 
@@ -107,17 +109,50 @@ def test_route_estimate_uses_transit_departure_time(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr(httpx, "Client", lambda timeout: mock_client)
     service = ToolService(Settings(google_maps_api_key="test-key"))
+    departure_time = datetime.fromisoformat("2026-05-02T08:15:00")
 
     response = service.estimate_route(
         RouteEstimateRequest(
             origin=Coordinates(lat=41.9028, lng=12.4964),
             destination=Coordinates(lat=41.8902, lng=12.4922),
             mode="transit",
+            departure_time=departure_time,
         )
     )
 
-    assert "departureTime" in mock_client.calls[0][1]
+    assert mock_client.calls[0][1]["departureTime"] == "2026-05-02T08:15:00"
     assert response.estimated_duration_minutes == 10
+
+
+def test_route_estimate_forwards_departure_time_for_non_transit_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_client = _MockClient(
+        response=_MockResponse(
+            {
+                "routes": [
+                    {
+                        "distanceMeters": 2200,
+                        "duration": "600s",
+                        "warnings": [],
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda timeout: mock_client)
+    service = ToolService(Settings(google_maps_api_key="test-key"))
+
+    service.estimate_route(
+        RouteEstimateRequest(
+            origin=Coordinates(lat=41.9028, lng=12.4964),
+            destination=Coordinates(lat=41.8902, lng=12.4922),
+            mode="driving",
+            departure_time=datetime.fromisoformat("2026-05-02T08:15:00"),
+        )
+    )
+
+    assert mock_client.calls[0][1]["departureTime"] == "2026-05-02T08:15:00"
 
 
 def test_route_estimate_requires_google_api_key() -> None:
