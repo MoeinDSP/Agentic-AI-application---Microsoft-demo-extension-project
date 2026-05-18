@@ -27,4 +27,4 @@ agent_factory = AgentFactory(
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
-    uvicorn.run(agent_factory.web, host="0.0.0.0", port=port)
+    uvicorn.run(agent_factory.a2a, host="0.0.0.0", port=port)
