@@ -4,7 +4,7 @@ from fasta2a import FastA2A
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
-from config import AgentEnum, get_agent_card, get_system_prompt
+from config import AgentEnum, get_agent_card, get_system_prompt, get_output_type
 
 
 class AgentFactory:
@@ -19,14 +19,15 @@ class AgentFactory:
             model=model,
             system_prompt=get_system_prompt(self.agent_enum),
             toolsets=toolsets or [],
+            output_type=get_output_type(self.agent_enum),
         )
 
     @property
     def a2a(self) -> FastA2A:
-        """Returns the Agent converted into a FastA2A ASGI app."""
+        """Expose the agent as a FastA2A ASGI app for orchestrator integration."""
         return self.agent.to_a2a(**get_agent_card(self.agent_enum))
 
     @property
     def web(self):
-        """Returns the Agent in a web-compatible interface (implementation may vary)."""
+        """Expose the agent as a Starlette ASGI app serving a web chat UI."""
         return self.agent.to_web()

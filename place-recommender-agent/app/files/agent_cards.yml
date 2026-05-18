@@ -1,62 +1,40 @@
 place_recommender:
-  name: Place Recommender
+  name: Visiting Place Recommender
   version: "1.0.0"
   url: "http://localhost:8000"
   description: >-
-    Recommends places (restaurants, cafes, hotels, attractions, and other
-    services) based on user preferences and location, powered by Google Maps.
+    Recommends visiting places (attractions, cultural sites, restaurants,
+    nightlife, and other experiences) in a user's destination city for trip
+    planning. Selects and ranks places based on the user's preferences,
+    budget, and constraints, and validates each candidate against Google Maps.
+    Designed to be called by a trip-planning orchestrator and may be invoked
+    multiple times during a single planning session.
   provider:
     organization: MSc Cloud Computing Project
     url: https://github.com/javad
   skills:
-    - id: place_search
-      name: Place Search
+    - id: recommend_visiting_places
+      name: Recommend Visiting Places
       description: >-
-        Search for places near a given location by name, type, or keyword
-        (e.g. "Italian restaurants in Milan", "coffee near Duomo").
+        Given a destination city and the user's preferences, interests,
+        budget, group type, and any constraints, return a ranked list of
+        places to visit. Each recommendation includes the place name,
+        coordinates, Google Maps links, and a short rationale tying it back
+        to the user's request. When required inputs (destination city, type
+        of experience) are missing, returns an empty list and explains what
+        is needed in the description field.
       tags:
-        - search
-        - places
+        - recommendations
+        - trip-planning
+        - visiting-places
         - google-maps
       examples:
-        - "Find a good sushi restaurant near Navigli, Milan"
-        - "What are some museums in Rome?"
-        - "Coffee shops near Politecnico di Milano"
+        - "Recommend historical sites to visit in Rome for a 3-day trip on a moderate budget."
+        - "Suggest family-friendly attractions in Milan, ideally near Navigli."
+        - "I'm a solo traveler in Berlin who likes nightlife - where should I go?"
+        - "Pick top cultural places in Kyoto for someone interested in temples and traditional gardens."
+        - "Recommend vegetarian-friendly restaurants in Barcelona, mid-range budget."
       input_modes:
         - text/plain
       output_modes:
-        - text/plain
-
-    - id: place_details
-      name: Place Details
-      description: >-
-        Retrieve detailed information about a specific place, including address,
-        rating, opening hours, phone number, and website.
-      tags:
-        - details
-        - places
-        - google-maps
-      examples:
-        - "What are the opening hours of Duomo di Milano?"
-        - "Is Eataly in Milan open right now?"
-        - "Give me the address and rating of Osteria Francescana"
-      input_modes:
-        - text/plain
-      output_modes:
-        - text/plain
-
-    - id: directions
-      name: Directions & Distance
-      description: >-
-        Get directions or travel distance between two locations.
-      tags:
-        - directions
-        - distance
-        - google-maps
-      examples:
-        - "How far is Castello Sforzesco from Politecnico di Milano?"
-        - "How do I get from Milan Centrale to the Navigli district?"
-      input_modes:
-        - text/plain
-      output_modes:
-        - text/plain
+        - application/json
