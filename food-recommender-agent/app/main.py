@@ -57,7 +57,7 @@ async def agent_card_handler(request: Request) -> Response:
             "stateTransitionHistory": False,
         },
         "defaultInputModes":  ["application/json", "text/plain"],
-        "defaultOutputModes": ["application/json", "text/plain"],
+        "defaultOutputModes": ["application/json"],
     }
     return JSONResponse(card)
 
@@ -77,5 +77,5 @@ app = FastA2A(
 # Override / guarantee the agent card route regardless of fasta2a internals
 app.routes.insert(
     0,
-    Route("/.well-known/agent.json", endpoint=agent_card_handler, methods=["GET"]),
+    Route("/.well-known/agent-card.json", endpoint=agent_card_handler, methods=["GET"]),
 )
