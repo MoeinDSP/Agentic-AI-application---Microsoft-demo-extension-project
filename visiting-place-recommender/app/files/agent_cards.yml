@@ -1,0 +1,58 @@
+place_recommender:
+  name: Visiting Place Recommendation (VPR)
+  version: "1.0.0"
+  url: "http://localhost:8000"
+  description: >-
+    Recommends places to visit in a destination city for trip planning. Each
+    request provides trip-planning context — destination, preferences, budget,
+    and other relevant details when available — and receives structured JSON
+    with an overall summary and a ranked list of places. Every recommended
+    place is in the destination city and chosen for relevance and schedule
+    suitability; some may be filtered in later planning steps. Uses Google Maps
+    place search. Returns an empty list when required information is missing
+    or no suitable matches are found, with an explanation of what is still
+    needed. Supports repeated calls as context is updated.
+  provider:
+    organization: MSc Cloud Computing Project
+    url: https://github.com/javad
+  skills:
+    - id: recommend_visiting_places
+      name: Recommend Visiting Places
+      description: >-
+        Recommends a set of places to visit in the destination city based on
+        preferences, budget, and other factors supplied in the request.
+
+        Objectives (in priority order): every place must be in the destination
+        city; recommendations should match user preferences; when residence or
+        accommodation area is known, proximity may influence ranking without
+        excluding worthwhile options farther away.
+
+        Requires an identifiable destination city in the input. Experience type
+        or category (e.g. historical, modern, sport, food, nightlife) is required
+        unless general recommendations were requested. When information is missing,
+        returns an empty list and explains what is still needed.
+
+        Considers budget, distance from residence or accommodation when provided,
+        popularity and relevance from search results, and fit with stated
+        preferences and constraints. Factual place data comes from Google Maps
+        search only.
+
+        Returns a ranked list of places in the destination city, each with display
+        name, Google Maps links, coordinates, and a per-place rationale, plus an
+        overall summary. Recommendations are strong candidates for a trip schedule.
+      tags:
+        - recommendations
+        - trip-planning
+        - visiting-places
+        - google-maps
+      examples:
+        - "Recommend historical sites to visit in Rome for a 3-day trip on a moderate budget."
+        - "Suggest family-friendly attractions in Milan, ideally near Navigli."
+        - "I'm a solo traveler in Berlin who likes nightlife — where should I go?"
+        - "Pick top cultural places in Kyoto for someone interested in temples and traditional gardens."
+        - "Recommend vegetarian-friendly restaurants in Barcelona, mid-range budget."
+        - "Find great coffee shops."
+      input_modes:
+        - text/plain
+      output_modes:
+        - application/json

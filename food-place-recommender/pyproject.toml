@@ -1,0 +1,16 @@
+[project]
+name = "food-place-recommender"
+version = "1.0.0"
+description = "Food place recommender agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn[standard]>=0.32.0,<1.0.0",
+    "pydantic-ai>=1.88.0,<2.0.0",
+    "pydantic-settings>=2.14.0,<3.0.0",
+    "fasta2a[pydantic-ai]>=0.6.1,<1.0.0",
+    "httpx>=0.27.0,<1.0.0",
+    "logfire>=4.16.0,<5.0.0",
+    "pyyaml>=6.0.0,<7.0.0",
+]

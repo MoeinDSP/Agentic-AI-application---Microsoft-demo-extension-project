@@ -1,0 +1,53 @@
+place_clusterer:
+  name: Visiting Place Clusterer (VPC)
+  version: "1.0.0"
+  url: "http://localhost:8000"
+  description: >-
+    Groups a list of recommended places into geographically coherent
+    day-clusters for trip planning. Each request provides the places to visit
+    (as produced by the visiting place recommender) and the trip dates, and
+    receives structured JSON with an overall summary and one cluster per trip
+    day. Clustering is based on place coordinates using K-means, so places
+    visited on the same day are close together and travel within a day is
+    minimised. The number of clusters equals the number of trip days, capped at
+    the number of places. Every input place is preserved exactly and assigned to
+    exactly one day. Returns an empty list when the places or trip dates are
+    missing, with an explanation of what is still needed.
+  provider:
+    organization: MSc Cloud Computing Project
+    url: https://github.com/javad
+  skills:
+    - id: cluster_visiting_places
+      name: Cluster Visiting Places
+      description: >-
+        Groups recommended places into day-clusters so each cluster holds the
+        places intended for a single trip day, minimising travel distance within
+        a day.
+
+        Requires the list of places (each with coordinates) and the trip dates
+        (or an explicit number of days) in the input. The number of clusters
+        equals the number of trip days, capped at the number of places. When the
+        places or trip duration are missing, returns an empty list and explains
+        what is still needed.
+
+        Clusters are computed deterministically with K-means on place
+        coordinates. Places are never invented, dropped, or modified — the same
+        places that come in are grouped and returned.
+
+        Returns one cluster per trip day, each holding its assigned places with
+        their original details, plus an overall summary of how the trip was
+        grouped.
+      tags:
+        - clustering
+        - trip-planning
+        - visiting-places
+        - itinerary
+      examples:
+        - "Cluster these 8 Milan places into a 2-day trip from 2026-06-10 to 2026-06-12."
+        - "Group the recommended Rome attractions across 3 days."
+        - "Split this list of places into day-groups for a 4-day visit."
+      input_modes:
+        - text/plain
+        - application/json
+      output_modes:
+        - application/json

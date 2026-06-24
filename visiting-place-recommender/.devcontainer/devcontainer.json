@@ -1,0 +1,24 @@
+{
+  "name": "Visiting Place Recommender",
+  "dockerComposeFile": "../../docker-compose.yml",
+  "service": "visiting-place-recommender",
+  "runServices": [
+    "visiting-place-recommender"
+  ],
+  "workspaceFolder": "/visiting-place-recommender/app",
+  "overrideCommand": false,
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.trimTrailingWhitespace": true,
+        "python.defaultInterpreterPath": "/visiting-place-recommender/.venv/bin/python"
+      }
+    }
+  }
+}

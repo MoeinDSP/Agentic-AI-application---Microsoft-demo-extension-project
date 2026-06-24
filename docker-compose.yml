@@ -1,0 +1,116 @@
+services:
+  orchestrator:
+    build:
+      context: orchestrator
+      dockerfile: Dockerfile
+    image: orchestrator:v1.0.0
+    container_name: orchestrator
+    env_file:
+      - ./orchestrator/.env
+    volumes:
+      - ./orchestrator/app:/orchestrator/app
+      - ./orchestrator/.venv:/orchestrator/.venv
+    working_dir: /orchestrator/app
+    ports:
+      - 8000:8000
+    networks:
+      - travel-scheduler-network
+    depends_on:
+      - visiting-place-recommender
+      - visiting-place-clusterer
+      - single-day-plan-scheduler
+      - single-day-plan-scheduler-mcp
+      - food-place-recommender
+
+  visiting-place-recommender:
+    build:
+      context: visiting-place-recommender
+      dockerfile: Dockerfile
+    image: visiting-place-recommender:v1.0.0
+    container_name: visiting-place-recommender
+    env_file:
+      - ./visiting-place-recommender/.env
+    volumes:
+      - ./visiting-place-recommender/app:/visiting-place-recommender/app
+      - ./visiting-place-recommender/.venv:/visiting-place-recommender/.venv
+    working_dir: /visiting-place-recommender/app
+    ports:
+      - 8001:8000
+    networks:
+      - travel-scheduler-network
+
+  visiting-place-clusterer:
+    build:
+      context: visiting-place-clusterer
+      dockerfile: Dockerfile
+    image: visiting-place-clusterer:v1.0.0
+    container_name: visiting-place-clusterer
+    env_file:
+      - ./visiting-place-clusterer/.env
+    volumes:
+      - ./visiting-place-clusterer/app:/visiting-place-clusterer/app
+      - ./visiting-place-clusterer/.venv:/visiting-place-clusterer/.venv
+    working_dir: /visiting-place-clusterer/app
+    ports:
+      - 8002:8000
+    networks:
+      - travel-scheduler-network
+
+  single-day-plan-scheduler:
+    build:
+      context: single-day-plan-scheduler
+      dockerfile: Dockerfile
+    image: single-day-plan-scheduler:v1.0.0
+    container_name: single-day-plan-scheduler
+    env_file:
+      - ./single-day-plan-scheduler/.env
+    volumes:
+      - ./single-day-plan-scheduler/app:/single-day-plan-scheduler/app
+      - ./single-day-plan-scheduler/.venv:/single-day-plan-scheduler/.venv
+    working_dir: /single-day-plan-scheduler/app
+    ports:
+      - 8003:8000
+    networks:
+      - travel-scheduler-network
+    depends_on:
+      - single-day-plan-scheduler-mcp
+      - food-place-recommender
+
+  single-day-plan-scheduler-mcp:
+    build:
+      context: single-day-plan-scheduler-mcp
+      dockerfile: Dockerfile
+    image: single-day-plan-scheduler-mcp:v1.0.0
+    container_name: single-day-plan-scheduler-mcp
+    env_file:
+      - ./single-day-plan-scheduler-mcp/.env
+    volumes:
+      - ./single-day-plan-scheduler-mcp/app:/single-day-plan-scheduler-mcp/app
+      - ./single-day-plan-scheduler-mcp/.venv:/single-day-plan-scheduler-mcp/.venv
+    working_dir: /single-day-plan-scheduler-mcp/app
+    ports:
+      - 8005:8000
+    networks:
+      - travel-scheduler-network
+
+  food-place-recommender:
+    build:
+      context: food-place-recommender
+      dockerfile: Dockerfile
+    image: food-place-recommender:v1.0.0
+    container_name: food-place-recommender
+    env_file:
+      - ./food-place-recommender/.env
+    volumes:
+      - ./food-place-recommender/app:/food-place-recommender/app
+      - ./food-place-recommender/.venv:/food-place-recommender/.venv
+    working_dir: /food-place-recommender/app
+    ports:
+      - 8004:8000
+    networks:
+      - travel-scheduler-network
+
+networks:
+  travel-scheduler-network:
+    name: travel-scheduler-network
+    driver: bridge

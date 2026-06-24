@@ -1,0 +1,45 @@
+food_recommender:
+  name: Food Place Recommendation (FPR)
+  version: "1.0.0"
+  url: "http://localhost:8000"
+  description: >-
+    Finds restaurants near a given location for a specific meal slot (breakfast, lunch, or dinner).
+    Accepts a structured JSON input with location, search radius, optional budget per person, and
+    optional cuisine preferences. Returns a ranked list of RestaurantCandidate objects sorted by
+    rating descending. Uses the Google Places Nearby Search API. Returns an empty list when no
+    results are found.
+  provider:
+    organization: MSc Cloud Computing Project
+    url: https://github.com/javad
+  skills:
+    - id: recommend_food_places
+      name: Recommend Food Places
+      description: >-
+        Searches for restaurants near a geographic location for a given meal slot.
+
+        Input (JSON — FoodRecommenderInput schema):
+          - timeofday: "breakfast" | "lunch" | "dinner"
+          - searchcenter: { latitude, longitude, address? }
+          - searchradiusmeters: integer 100–50000 (default 1000)
+          - budgetpermealperperson: optional float in EUR
+          - preferences: optional list of cuisine or dietary strings
+
+        Returns a list of RestaurantCandidate objects sorted by rating descending, then by
+        price_level ascending. Each candidate includes: id, name, location (lat/lng/address),
+        price_level (1–4), cuisines, rating (0–5), and summary. Returns an empty list when no
+        restaurants are found within the search area.
+      tags:
+        - recommendations
+        - trip-planning
+        - food
+        - restaurants
+        - google-places
+      examples:
+        - '{"timeofday": "lunch", "searchcenter": {"latitude": 45.4654, "longitude": 9.1866}, "searchradiusmeters": 500}'
+        - '{"timeofday": "dinner", "searchcenter": {"latitude": 45.4654, "longitude": 9.1866}, "budgetpermealperperson": 30, "preferences": ["italian", "pizza"]}'
+        - '{"timeofday": "breakfast", "searchcenter": {"latitude": 48.8566, "longitude": 2.3522}, "searchradiusmeters": 300, "preferences": ["cafe", "bakery"]}'
+      input_modes:
+        - application/json
+        - text/plain
+      output_modes:
+        - application/json

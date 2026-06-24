@@ -1,0 +1,28 @@
+{
+  "name": "Orchestrator",
+  "dockerComposeFile": "../../docker-compose.yml",
+  "service": "orchestrator",
+  "runServices": [
+    "orchestrator",
+    "visiting-place-recommender",
+    "visiting-place-clusterer",
+    "single-day-plan-scheduler",
+    "food-place-recommender"
+  ],
+  "workspaceFolder": "/orchestrator/app",
+  "overrideCommand": false,
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.trimTrailingWhitespace": true,
+        "python.defaultInterpreterPath": "/orchestrator/.venv/bin/python"
+      }
+    }
+  }
+}

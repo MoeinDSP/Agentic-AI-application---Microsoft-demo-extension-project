@@ -1,0 +1,46 @@
+plan_scheduler:
+  name: Single Day Plan Scheduler (SDPS)
+  version: "1.0.0"
+  url: "http://localhost:8000"
+  description: >-
+    Builds a single-day itinerary from a set of candidate places. Orders the visits,
+    inserts lunch and dinner using the food-place-recommender agent, and estimates travel
+    between consecutive stops using its own Google Routes MCP server. Accepts a structured
+    JSON DaySchedulingRequest and returns a structured DaySchedulingResult with an ordered
+    list of visit, travel, and meal events, the places that could not be scheduled, and
+    machine-readable warnings.
+  provider:
+    organization: MSc Cloud Computing Project
+    url: https://github.com/javad
+  skills:
+    - id: schedule_single_day_plan
+      name: Schedule Single Day Plan
+      description: >-
+        Plans one day of travel from candidate places, meal preferences, and transport options.
+
+        Input (JSON — DaySchedulingRequest schema):
+          - places: list of PlaceCandidate { id, name, location{latitude,longitude,address?},
+            estimated_visit_duration_minutes, estimated_cost?, category?, rating?, summary?,
+            priority_score?, opening_hours?[] }
+          - day_start: ISO 8601 datetime
+          - day_end: ISO 8601 datetime
+          - food_budget_per_day: optional float in EUR
+          - preferences: optional list of cuisine or activity strings
+          - acceptable_transport_modes: list of "walking" | "driving" | "transit" | "bicycling"
+
+        Returns a DaySchedulingResult with: description, day_schedule { date, events[] } where
+        each event is a visit, travel, or meal event; unscheduled_places[]; and warnings[].
+      tags:
+        - planning
+        - itinerary
+        - trip-planning
+        - scheduling
+        - travel
+      examples:
+        - '{"places": [{"id": "duomo", "name": "Duomo di Milano", "location": {"latitude": 45.4641, "longitude": 9.1919}, "estimated_visit_duration_minutes": 90, "priority_score": 0.9}], "day_start": "2026-06-01T09:00:00", "day_end": "2026-06-01T21:00:00", "acceptable_transport_modes": ["walking"]}'
+        - '{"places": [{"id": "castello", "name": "Castello Sforzesco", "location": {"latitude": 45.4705, "longitude": 9.1796}, "estimated_visit_duration_minutes": 75}], "day_start": "2026-06-01T10:00:00", "day_end": "2026-06-01T20:00:00", "food_budget_per_day": 60, "preferences": ["italian"], "acceptable_transport_modes": ["walking", "transit"]}'
+      input_modes:
+        - application/json
+        - text/plain
+      output_modes:
+        - application/json

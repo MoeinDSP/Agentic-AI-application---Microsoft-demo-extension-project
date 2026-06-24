@@ -1,0 +1,24 @@
+{
+  "name": "Single Day Plan Scheduler",
+  "dockerComposeFile": "../../docker-compose.yml",
+  "service": "single-day-plan-scheduler",
+  "runServices": [
+    "single-day-plan-scheduler"
+  ],
+  "workspaceFolder": "/single-day-plan-scheduler/app",
+  "overrideCommand": false,
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.trimTrailingWhitespace": true,
+        "python.defaultInterpreterPath": "/single-day-plan-scheduler/.venv/bin/python"
+      }
+    }
+  }
+}
