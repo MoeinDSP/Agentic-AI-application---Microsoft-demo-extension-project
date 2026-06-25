@@ -488,10 +488,10 @@ uv run pytest -m "not integration"
 
 | Name | GitHub |
 |---|---|
+| Moein Taherinezhad | [@MoeinDSP](https://github.com/MoeinDSP) |
 | Alireza Jahandoost | [@alireza-jahandoost](https://github.com/alireza-jahandoost) |
 | Javad Zandiyeh | [@JavadZandiyeh](https://github.com/JavadZandiyeh) |
-| Aman Zargari | [@amanzargari](https://github.com/amanzargari) |
-| Moein Taherine | [@MoeinDSP](https://github.com/MoeinDSP) |
+| Aman Zargari | [@amanzargari](https://github.com/amanzargari) 
 
 ---
 
